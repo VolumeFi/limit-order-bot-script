@@ -51,7 +51,7 @@ async def limit_order_bot_init():
                 MsgInstantiateContract(
                     wallet.key,
                     wallet.key,
-                    code_id,
+                    int(code_id),
                     job_id,
                     initialize_msg,
                     funds
