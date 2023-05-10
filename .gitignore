@@ -1,1 +1,3 @@
 .env
+.hypothesis
+node_modules

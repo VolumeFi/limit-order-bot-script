@@ -1,6 +1,7 @@
 import os
 import uvloop
 import asyncio
+import json
 from web3 import Web3
 from web3.contract import Contract
 from dotenv import load_dotenv
@@ -15,10 +16,10 @@ async def limit_order_bot_init():
     node: str = os.environ['BNB_NODE']
     w3: Web3 = Web3(Web3.HTTPProvider(node))
     pancakeswap_lob_vyper = os.environ['PANCAKESWAP_LOB_VYPER']
-    pancakeswap_lob_abi = os.environ['PANCAKESWAP_LOB_ABI']
+    pancakeswap_lob_abi = json.loads(os.environ['PANCAKESWAP_LOB_ABI'])
     lob_sc: Contract = w3.eth.contract(
         address=pancakeswap_lob_vyper, abi=pancakeswap_lob_abi)
-    payload = lob_sc.encodeABI("multiple_withdraw", [])[2:]
+    payload = lob_sc.encodeABI("multiple_withdraw", [[], []])[2:]
 
     paloma_lcd = os.environ['PALOMA_LCD']
     paloma_chain_id = os.environ['PALOMA_CHAIN_ID']
