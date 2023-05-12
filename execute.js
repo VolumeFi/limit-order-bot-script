@@ -15,9 +15,10 @@ const PALOMA_LCD = process.env.PALOMA_LCD;
 const PALOMA_CHAIN_ID = process.env.PALOMA_CHAIN_ID;
 const PALOMA_PRIVATE_KEY = process.env.PALOMA_PRIVATE_KEY;
 const LOB_CW = process.env.LOB_CW;
-const WBNB = process.env.WETH;
+const WETH = process.env.WETH;
 const SLIPPAGE = process.env.SLIPPAGE;
 const DENOMINATOR = 10000;
+const MAX_SIZE = 64;
 
 // Fetch all deposited order.
 // Fetch all withdrawn/canceled order.
@@ -157,6 +158,9 @@ async function getDepositIds(row) {
         } else if (amount1.lte(amount1_min)) {
             ids.push(row[key].deposit_id);
             profit_taking_or_stop_loss.push(false);
+        }
+        if (ids.length() >= MAX_SIZE) {
+            break;
         }
     }
     if (ids.length() > 0) {
