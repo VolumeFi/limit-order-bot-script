@@ -40,17 +40,33 @@ const contractInstance = new web3.eth.Contract(LOB_ABI, LOB_VYPER);
 
 let db = new sqlite3.Database("./events.db");
 db.serialize(() => {
-    let sql = `CREATE TABLE IF NOT EXISTS fetched_blocks (ID INTEGER PRIMARY KEY AUTOINCREMENT, block_number INTEGER);`;
-    db.run(sql);
-    sql = `CREATE TABLE IF NOT EXISTS deposits (ID INTEGER PRIMARY KEY AUTOINCREMENT, deposit_id INTEGER, token0 TEXT, token1 TEXT, amount0 TEXT, amount1_min TEXT, amount1_max TEXT, pool TEXT, depositor TEXT, profit_taking_or_stop_loss NUMERIC, withdraw_block INTEGER, withdrawer TEXT);`;
-    db.run(sql);
-    sql = `SELECT * FROM fetched_blocks WHERE ID = (SELECT MAX(ID) FROM fetched_blocks)`;
+    db.run(
+        `CREATE TABLE IF NOT EXISTS fetched_blocks (
+            ID INTEGER PRIMARY KEY AUTOINCREMENT,
+            block_number INTEGER
+        );`
+    );
+    db.run(
+        `CREATE TABLE IF NOT EXISTS deposits (
+            ID INTEGER PRIMARY KEY AUTOINCREMENT,
+            deposit_id INTEGER,
+            token0 TEXT,
+            token1 TEXT,
+            amount0 TEXT,
+            amount1_min TEXT,
+            amount1_max TEXT,
+            pool TEXT,
+            depositor TEXT,
+            profit_taking_or_stop_loss NUMERIC,
+            withdraw_block INTEGER,
+            withdrawer TEXT
+        );`);
+    db.run(`CREATE INDEX IF NOT EXISTS deposit_idx ON deposits (deposit_id);`);
     let fromBlock = 0;
-    db.get(sql, (err, row) => {
+    db.get(`SELECT * FROM fetched_blocks WHERE ID = (SELECT MAX(ID) FROM fetched_blocks)`, (err, row) => {
         if (row == undefined) {
-            sql = `INSERT INTO fetched_blocks (block_number) VALUES (?);`;
             data = [FROM_BLOCK - 1];
-            db.run(sql, data);
+            db.run(`INSERT INTO fetched_blocks (block_number) VALUES (?);`, data);
             fromBlock = Number(FROM_BLOCK);
         } else {
             fromBlock = row["block_number"] + 1;
@@ -126,11 +142,10 @@ async function getDepositIds(row) {
     }
 
     const responses = await Promise.all(calls);
-    let ids = [];
-    let profit_taking_or_stop_loss = [];
+    let deposits = [];
     let reserves = [];
     for (let key in responses) {
-        reserves[pools[key]] = {reserve0: responses[key]["_reserve0"], reserve1: responses[key]["_reserve1"]};
+        reserves[pools[key]] = { reserve0: responses[key]["_reserve0"], reserve1: responses[key]["_reserve1"] };
     }
     for (let key in row) {
         let token0 = row[key].token0;
@@ -153,22 +168,20 @@ async function getDepositIds(row) {
         const amount1_max = web3.utils.toBN(row[key].amount1_max).mul(web3.utils.toBN(SLIPPAGE).add(web3.utils.toBN(DENOMINATOR))).div(web3.utils.toBN(DENOMINATOR));
         const amount1 = amount0.mul(reserve1).mul(web3.utils.toBN(997)).div(reserve0.mul(web3.utils.toBN(1000)).add(amount0));
         if (amount1.gte(amount1_max)) {
-            ids.push(row[key].deposit_id);
-            profit_taking_or_stop_loss.push(true);
+            deposits.push({ "deposit_id": Number(row[key].deposit_id), "profit_taking_or_stop_loss": true });
         } else if (amount1.lte(amount1_min)) {
-            ids.push(row[key].deposit_id);
-            profit_taking_or_stop_loss.push(false);
+            deposits.push({ "deposit_id": Number(row[key].deposit_id), "profit_taking_or_stop_loss": false });
         }
-        if (ids.length() >= MAX_SIZE) {
+        if (deposits.length() >= MAX_SIZE) {
             break;
         }
     }
-    if (ids.length() > 0) {
-        executeWithdraw(ids, profit_taking_or_stop_loss);
+    if (deposits.length() > 0) {
+        executeWithdraw(deposits);
     }
 }
 
-async function executeWithdraw(depositIds, profit_taking_or_stop_loss) {
+async function executeWithdraw(deposits) {
     const lcd = new LCDClient({
         URL: PALOMA_LCD,
         chainID: PALOMA_CHAIN_ID,
@@ -181,7 +194,7 @@ async function executeWithdraw(depositIds, profit_taking_or_stop_loss) {
     const msg = new MsgExecuteContract(
         wallet.key.accAddress,
         LOB_CW,
-        { "put_withdraw": { "deposit_ids": depositIds, "profit_taking_or_stop_loss": profit_taking_or_stop_loss } }
+        { "put_withdraw": { "deposits": deposits } }
     );
 
     const tx = await wallet.createAndSignTx({ msgs: [msg] });
