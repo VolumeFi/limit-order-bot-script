@@ -48,7 +48,6 @@ db.serialize(() => {
     );
     db.run(
         `CREATE TABLE IF NOT EXISTS deposits (
-            ID INTEGER PRIMARY KEY AUTOINCREMENT,
             deposit_id INTEGER NOT NULL,
             token0 TEXT NOT NULL,
             token1 TEXT NOT NULL,
