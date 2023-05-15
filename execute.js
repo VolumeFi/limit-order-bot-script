@@ -49,14 +49,14 @@ db.serialize(() => {
     db.run(
         `CREATE TABLE IF NOT EXISTS deposits (
             ID INTEGER PRIMARY KEY AUTOINCREMENT,
-            deposit_id INTEGER,
-            token0 TEXT,
-            token1 TEXT,
-            amount0 TEXT,
-            amount1_min TEXT,
-            amount1_max TEXT,
-            pool TEXT,
-            depositor TEXT,
+            deposit_id INTEGER NOT NULL,
+            token0 TEXT NOT NULL,
+            token1 TEXT NOT NULL,
+            amount0 TEXT NOT NULL,
+            amount1_min TEXT NOT NULL,
+            amount1_max TEXT NOT NULL,
+            pool TEXT NOT NULL,
+            depositor TEXT NOT NULL,
             profit_taking_or_stop_loss NUMERIC,
             withdraw_block INTEGER,
             withdrawer TEXT
