@@ -1,6 +1,6 @@
 {
   "dependencies": {
-    "@palomachain/paloma.js": "^3.0.24",
+    "@palomachain/paloma.js": "3.0.25",
     "dotenv": "^16.0.3",
     "sqlite3": "^5.1.6",
     "web3": "^1.9.0"
