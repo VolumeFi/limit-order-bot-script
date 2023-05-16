@@ -1,4 +1,4 @@
-paloma_sdk==3.0.17
+paloma_sdk==3.0.18
 python-dotenv==1.0.0
 uvloop==0.17.0
 web3==5.31.3
