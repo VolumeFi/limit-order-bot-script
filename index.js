@@ -1,6 +1,6 @@
 const Sentry = require('@sentry/node');
 const express = require('express');
-const {create_db, processDeposits} = require('./limit-orders');
+const { getAllDeposits, processDeposits} = require('./limit-orders');
 
 require('dotenv').config();
 
@@ -34,7 +34,7 @@ function convert(deposit) {
 app.get('/robots', async (req, res) => {
     try {
         let depositor = req.query.depositor || null;
-        let deposits = await limitOrders.getAllDeposits(depositor);
+        let deposits = await getAllDeposits(depositor);
         let result = [];
 
         deposits.forEach(deposit => {
