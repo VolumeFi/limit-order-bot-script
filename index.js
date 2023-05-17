@@ -1,13 +1,13 @@
 const Sentry = require('@sentry/node');
 const express = require('express');
-const limitOrders = require('./limit-orders');
+const {create_db, processDeposits} = require('./limit-orders');
 
 require('dotenv').config();
 
-Sentry.init({ dsn: process.env.SENTRY });
+//Sentry.init({ dsn: process.env.SENTRY });
 
-await limitOrders.create_db();
-limitOrders.processDeposits();
+processDeposits();
+
 
 const app = express();
 
@@ -23,6 +23,7 @@ function convert(deposit) {
 
     return {
         "token0": deposit.token0,
+        "token1": deposit.token1,
         "stop_loss": amount1_min / amount0,
         "profit_taking": amount1_max / amount0,
         "depositor": deposit.depositor,

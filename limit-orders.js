@@ -27,22 +27,19 @@ const web3 = new Web3(BNB_NODE);
 const contractInstance = new web3.eth.Contract(LOB_ABI, LOB_VYPER);
 
 let db = new sqlite3.Database("./events.db");
-
-async function create_db() {
-    await db.run(
+db.serialize(() => {
+    db.run(
         `CREATE TABLE IF NOT EXISTS fetched_blocks (
             ID INTEGER PRIMARY KEY AUTOINCREMENT,
             block_number INTEGER
         );`
     );
-
-    await db.run(
+    db.run(
         `CREATE TABLE IF NOT EXISTS deposits (
             deposit_id INTEGER NOT NULL,
             token0 TEXT NOT NULL,
             token1 TEXT NOT NULL,
             amount0 TEXT NOT NULL,
-            amount1 TEXT NOT NULL,
             amount1_min TEXT NOT NULL,
             amount1_max TEXT NOT NULL,
             pool TEXT NOT NULL,
@@ -51,11 +48,8 @@ async function create_db() {
             withdraw_block INTEGER,
             withdrawer TEXT
         );`);
-
-    await db.run(`CREATE INDEX IF NOT EXISTS deposit_idx ON deposits (deposit_id);`);
-
-    await db.run(`CREATE TABLE IF NOT EXISTS users (chat_id TEXT PRIMARY KEY, address TEXT NOT NULL);`);
-}
+    db.run(`CREATE INDEX IF NOT EXISTS deposit_idx ON deposits (deposit_id);`);
+});
 
 // Fetch all deposited order.
 // Fetch all withdrawn/canceled order.
@@ -66,7 +60,8 @@ async function create_db() {
 
 async function getLastBlock() {
     let fromBlock = 0;
-    await db.get(`SELECT * FROM fetched_blocks WHERE ID = (SELECT MAX(ID) FROM fetched_blocks)`, (err, row) => {
+
+    db.get(`SELECT * FROM fetched_blocks WHERE ID = (SELECT MAX(ID) FROM fetched_blocks)`, (err, row) => {
         if (row == undefined) {
             data = [FROM_BLOCK - 1];
             db.run(`INSERT INTO fetched_blocks (block_number) VALUES (?);`, data);
@@ -79,6 +74,7 @@ async function getLastBlock() {
 }
 
 async function getNewBlocks(fromBlock) {
+    console.log("getNewBlocks", fromBlock);
     const block_number = Number(await web3.eth.getBlockNumber());
     let deposited_events = [];
     let withdrawn_events = [];
@@ -129,12 +125,14 @@ async function getNewBlocks(fromBlock) {
             getDepositIds(row);
         });
     });
-    db.close();
 }
 
 async function getDepositIds(row) {
+    console.log("getDepositIds", row);
     let calls = [];
     let pools = [];
+    let deposits = [];
+    let reserves = [];
 
     for (let key in row) {
         if (!pools.includes(row[key].pool)) {
@@ -145,8 +143,7 @@ async function getDepositIds(row) {
     }
 
     const responses = await Promise.all(calls);
-    let deposits = [];
-    let reserves = [];
+
     for (let key in responses) {
         reserves[pools[key]] = {reserve0: responses[key]["_reserve0"], reserve1: responses[key]["_reserve1"]};
     }
@@ -178,16 +175,17 @@ async function getDepositIds(row) {
         } else if (amount1.lte(amount1_min)) {
             deposits.push({"deposit_id": Number(row[key].deposit_id), "profit_taking_or_stop_loss": false});
         }
-        if (deposits.length() >= MAX_SIZE) {
+        if (deposits.length >= MAX_SIZE) {
             break;
         }
     }
-    if (deposits.length() > 0) {
+    if (deposits.length > 0) {
         await executeWithdraw(deposits);
     }
 }
 
 async function executeWithdraw(deposits) {
+    console.log("executeWithdraw", deposits);
     const lcd = new LCDClient({
         URL: PALOMA_LCD,
         chainID: PALOMA_CHAIN_ID,
@@ -255,7 +253,8 @@ async function updateAmount1(depositId, newAmount1) {
 }
 
 function processDeposits() {
-    setInterval(getLastBlock, 1000);
+    console.log("process deposits");
+    setInterval(getLastBlock, 3000);
 }
 
 const token = process.env.TELEGRAM_ID;
@@ -294,6 +293,5 @@ function swapComplete(chatId) {
 
 module.exports = {
     processDeposits,
-    getAllDeposits,
-    create_db
+    getAllDeposits
 };
