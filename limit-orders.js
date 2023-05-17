@@ -62,13 +62,10 @@ async function getLastBlock() {
     let fromBlock = 0;
 
     db.get(`SELECT * FROM fetched_blocks WHERE ID = (SELECT MAX(ID) FROM fetched_blocks)`, (err, row) => {
-        if (row == undefined) {
-            data = [FROM_BLOCK - 1];
-            db.run(`INSERT INTO fetched_blocks (block_number) VALUES (?);`, data);
-            fromBlock = Number(FROM_BLOCK);
-        } else {
-            fromBlock = row["block_number"] + 1;
+        if (row != undefined) {
+            fromBlock = row["block_number"];
         }
+
         getNewBlocks(fromBlock);
     });
 }
@@ -79,17 +76,13 @@ async function getNewBlocks(fromBlock) {
     let deposited_events = [];
     let withdrawn_events = [];
     for (let i = fromBlock; i <= block_number; i += 10000) {
-        let toBlock = i + 9999;
-        if (toBlock > block_number) {
-            toBlock = block_number;
-        }
         const new_deposited_events = await contractInstance.getPastEvents("Deposited", {
             fromBlock: i,
-            toBlock: toBlock,
+            toBlock: 'latest',
         });
         const new_withdrawn_events = await contractInstance.getPastEvents("Withdrawn", {
             fromBlock: i,
-            toBlock: toBlock,
+            toBlock: 'latest',
         });
         deposited_events = deposited_events.concat(new_deposited_events);
         withdrawn_events = withdrawn_events.concat(new_withdrawn_events);
