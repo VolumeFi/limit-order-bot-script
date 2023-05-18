@@ -17,18 +17,31 @@ app.get('/', (req, res) => {
 
 function convert(deposit) {
     let amount0 = BigInt(deposit.amount0);
-    let amount1 = BigInt(deposit.amount1);
+    let amount1 = null;
+    if (deposit.amount1) {
+        amount1 = BigInt(deposit.amount1);
+    }
     let amount1_min = BigInt(deposit.amount1_min);
     let amount1_max = BigInt(deposit.amount1_max);
 
-    return {
-        "token0": deposit.token0,
-        "token1": deposit.token1,
-        "stop_loss": amount1_min / amount0,
-        "profit_taking": amount1_max / amount0,
-        "depositor": deposit.depositor,
-        "current_price": amount1 / amount0
-    };
+    if (deposit.amount1) {
+        return {
+            "token0": deposit.token0.toString(),
+            "token1": deposit.token1.toString(),
+            "stop_loss": (amount1_min / amount0).toString(),
+            "profit_taking": (amount1_max / amount0).toString(),
+            "depositor": (deposit.depositor).toString(),
+            "current_price": (amount1 / amount0).toString()
+        };
+    } else {
+        return {
+            "token0": deposit.token0.toString(),
+            "token1": deposit.token1.toString(),
+            "stop_loss": (amount1_min / amount0).toString(),
+            "profit_taking": (amount1_max / amount0).toString(),
+            "depositor": (deposit.depositor).toString(),
+        };
+    }
 }
 
 app.get('/robots', async (req, res) => {
@@ -37,9 +50,9 @@ app.get('/robots', async (req, res) => {
         let deposits = await getAllDeposits(depositor);
         let result = [];
 
-        deposits.forEach(deposit => {
+        for (const deposit of deposits) {
             result.push(convert(deposit));
-        });
+        }
 
         res.json(result);
     } catch (err) {
