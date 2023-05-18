@@ -51,7 +51,9 @@ app.get('/robots', async (req, res) => {
         let result = [];
 
         for (const deposit of deposits) {
-            result.push(convert(deposit));
+            if(deposit.withdraw_block === null) {
+                result.push(convert(deposit));
+            }
         }
 
         res.json(result);

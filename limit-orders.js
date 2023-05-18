@@ -142,7 +142,7 @@ async function getNewBlocks(fromBlock) {
     for (const deposit of deposits) {
         let withdrawDeposit = null;
 
-        if(deposit.withdraw_block) {
+        if(deposit.withdraw_block === null) {
             withdrawDeposit = await processDeposit(deposit);
         }
 
