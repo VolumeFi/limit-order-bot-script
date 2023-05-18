@@ -16,9 +16,10 @@ const FROM_BLOCK = process.env.UNISWAP_V3_LOB_VYPER_START;
 
 const PALOMA_LCD = process.env.PALOMA_LCD;
 const PALOMA_CHAIN_ID = process.env.PALOMA_CHAIN_ID;
-const PALOMA_PRIVATE_KEY = process.env.PALOMA_PRIVATE_KEY;
+const PALOMA_PRIVATE_KEY = process.env.PALOMA_KEY;
 const LOB_CW = process.env.LOB_CW;
 const WETH = process.env.WETH;
+const VETH = process.env.VETH;
 const SLIPPAGE = process.env.SLIPPAGE;
 const DENOMINATOR = 10000;
 const MAX_SIZE = 64;
@@ -40,6 +41,7 @@ db.serialize(() => {
             token0 TEXT NOT NULL,
             token1 TEXT NOT NULL,
             amount0 TEXT NOT NULL,
+            amount1 TEXT,
             amount1_min TEXT NOT NULL,
             amount1_max TEXT NOT NULL,
             pool TEXT NOT NULL,
@@ -57,8 +59,16 @@ db.serialize(() => {
 // Find pools list to fetch information.
 // Fetch all pool information from Uniswap V3.
 // Find executable IDs.
+let processing = false;
 
 async function getLastBlock() {
+    if (processing) {
+        return 0
+    } else {
+        processing = true;
+    }
+
+
     let fromBlock = 0;
 
     db.get(`SELECT * FROM fetched_blocks WHERE ID = (SELECT MAX(ID) FROM fetched_blocks)`, (err, row) => {
@@ -120,68 +130,69 @@ async function getNewBlocks(fromBlock) {
         let sql = `INSERT INTO fetched_blocks (block_number) VALUES (?);`;
         data = [block_number];
         db.run(sql, data);
-        sql = `SELECT deposit_id, token0, token1, amount0, amount1_min, amount1_max, pool FROM deposits WHERE withdraw_block IS NULL;`;
-        db.all(sql, (err, row) => {
-            getDepositIds(row);
-        });
     });
+
+    const deposits = await getAllDeposits();
+    const withdrawDeposits = [];
+
+    for (const deposit of deposits) {
+        const withdrawDeposit = await processDeposit(deposit);
+
+        if(withdrawDeposit) {
+            withdrawDeposits.push(withdrawDeposit);
+        }
+    }
+
+    if (withdrawDeposits.length > 0) {
+        await executeWithdraw(withdrawDeposits);
+    }
+
+    processing = false;
 }
 
-async function getDepositIds(row) {
-    console.log("getDepositIds", row);
-    let calls = [];
-    let pools = [];
-    let deposits = [];
-    let reserves = [];
 
-    for (let key in row) {
-        if (!pools.includes(row[key].pool)) {
-            let poolInstance = new web3.eth.Contract(POOL_ABI, row[key].pool);
-            calls.push(poolInstance.methods.getReserves().call());
-            pools.push(row[key].pool);
-        }
+async function processDeposit(deposit) {
+    console.log("processDeposit", deposit);
+
+    let contract = new web3.eth.Contract(POOL_ABI, deposit.pool);
+    const reserves = await contract.methods.getReserves().call();
+
+    let reserve0 = web3.utils.toBN(reserves._reserve0)
+    let reserve1 = web3.utils.toBN(reserves._reserve1);
+
+    let token0 = deposit.token0;
+    let token1 = deposit.token1;
+
+    if (token0 == VETH) {
+        token0 = WETH;
     }
 
-    const responses = await Promise.all(calls);
-
-    for (let key in responses) {
-        reserves[pools[key]] = {reserve0: responses[key]["_reserve0"], reserve1: responses[key]["_reserve1"]};
+    if (token1 == VETH) {
+        token0 = WETH;
     }
-    for (let key in row) {
-        let token0 = row[key].token0;
-        let token1 = row[key].token1;
-        if (token0 == VETH) {
-            token0 = WETH;
-        }
-        if (token1 == VETH) {
-            token0 = WETH;
-        }
-        let reserve0 = web3.utils.toBN(reserves[row[key].pool].reserve0);
-        let reserve1 = web3.utils.toBN(reserves[row[key].pool].reserve1);
-        if (web3.utils.toBN(token0).gt(web3.utils.toBN(token1))) {
-            const swaptemp = reserve0;
-            reserve0 = reserve1;
-            reserve1 = swaptemp;
-        }
-        const amount0 = web3.utils.toBN(row[key].amount0);
-        const amount1_min = web3.utils.toBN(row[key].amount1_min).mul(web3.utils.toBN(SLIPPAGE).add(web3.utils.toBN(DENOMINATOR))).div(web3.utils.toBN(DENOMINATOR));
-        const amount1_max = web3.utils.toBN(row[key].amount1_max).mul(web3.utils.toBN(SLIPPAGE).add(web3.utils.toBN(DENOMINATOR))).div(web3.utils.toBN(DENOMINATOR));
-        const amount1 = amount0.mul(reserve1).mul(web3.utils.toBN(997)).div(reserve0.mul(web3.utils.toBN(1000)).add(amount0));
 
-        await updateAmount1(row[key].deposit_id, amount1);
+    if (web3.utils.toBN(token0).gt(web3.utils.toBN(token1))) {
+        const swaptemp = reserve0;
+        reserve0 = reserve1;
+        reserve1 = swaptemp;
+    }
 
-        if (amount1.gte(amount1_max)) {
-            deposits.push({"deposit_id": Number(row[key].deposit_id), "profit_taking_or_stop_loss": true});
-        } else if (amount1.lte(amount1_min)) {
-            deposits.push({"deposit_id": Number(row[key].deposit_id), "profit_taking_or_stop_loss": false});
-        }
-        if (deposits.length >= MAX_SIZE) {
-            break;
-        }
+    const amount0 = web3.utils.toBN(deposit.amount0);
+    const amount1_min = web3.utils.toBN(deposit.amount1_min).mul(web3.utils.toBN(SLIPPAGE).add(web3.utils.toBN(DENOMINATOR))).div(web3.utils.toBN(DENOMINATOR));
+    const amount1_max = web3.utils.toBN(deposit.amount1_max).mul(web3.utils.toBN(SLIPPAGE).add(web3.utils.toBN(DENOMINATOR))).div(web3.utils.toBN(DENOMINATOR));
+    let amount1 = amount0.mul(reserve1);
+    amount1 = amount1.mul(web3.utils.toBN(997));
+    amount1 = amount1.div(reserve0.mul(web3.utils.toBN(1000)).add(amount0));
+
+    await updateAmount1(deposit.deposit_id, amount1.toString());
+
+    if (amount1.gte(amount1_max)) {
+        return {"deposit_id": Number(deposit.deposit_id), "profit_taking_or_stop_loss": true};
+    } else if (amount1.lte(amount1_min)) {
+        return {"deposit_id": Number(deposit.deposit_id), "profit_taking_or_stop_loss": false};
     }
-    if (deposits.length > 0) {
-        await executeWithdraw(deposits);
-    }
+
+    return null;
 }
 
 async function executeWithdraw(deposits) {
@@ -201,13 +212,19 @@ async function executeWithdraw(deposits) {
         {"put_withdraw": {"deposits": deposits}}
     );
 
-    const tx = await wallet.createAndSignTx({msgs: [msg]});
-    const result = await lcd.tx.broadcast(tx);
+    let result = null;
 
     try {
-        deposits.forEach(deposit => {
-            swapComplete(getChatIdByAddress(deposit.deposit_id));
-        });
+        const tx = await wallet.createAndSignTx({msgs: [msg]});
+        result = await lcd.tx.broadcast(tx);
+
+        try {
+            deposits.forEach(deposit => {
+                swapComplete(getChatIdByAddress(deposit.deposit_id));
+            });
+        } catch (e) {
+            console.log(e);
+        }
     } catch (e) {
         console.log(e);
     }
@@ -246,6 +263,7 @@ async function getAllDeposits(depositor = null) {
 }
 
 async function updateAmount1(depositId, newAmount1) {
+    console.log('updateAmount1');
     await db.run(
         `UPDATE deposits SET amount1 = ? WHERE deposit_id = ?`,
         [newAmount1, depositId], null
@@ -257,35 +275,40 @@ function processDeposits() {
     setInterval(getLastBlock, 3000);
 }
 
-const token = process.env.TELEGRAM_ID;
-const bot = new TelegramBot(token, {polling: true});
 
-bot.on('message', (msg) => {
-    const chatId = msg.chat.id;
-    db.get(`SELECT address FROM users WHERE chat_id = ?`, [chatId], (err, row) => {
-        if (err) {
-            console.error(err.message);
-            return;
-        }
-        if (row) {
-            bot.sendMessage(chatId, 'We already have your address. We will notify you when any of your swaps are complete.');
-        } else {
-            bot.sendMessage(chatId, 'Please provide your address');
-        }
-    });
-});
+if (process.env.TELEGRAM_ID) {
+    const token = process.env.TELEGRAM_ID;
+    const bot = new TelegramBot(token, {polling: true});
 
-bot.onText(/^(0x[a-fA-F0-9]{40})$/, (msg, match) => {
-    const chatId = msg.chat.id;
-    const address = match[1];
-    db.run(`INSERT OR REPLACE INTO users(chat_id, address) VALUES(?, ?)`, [chatId, address], function(err) {
-        if (err) {
-            console.error(err.message);
-            return;
-        }
-        bot.sendMessage(chatId, 'Address received! We will notify you when the swap is complete.');
+    bot.on('message', (msg) => {
+        const chatId = msg.chat.id;
+        db.get(`SELECT address FROM users WHERE chat_id = ?`, [chatId], (err, row) => {
+            if (err) {
+                console.error(err.message);
+                return;
+            }
+            if (row) {
+                bot.sendMessage(chatId, 'We already have your address. We will notify you when any of your swaps are complete.');
+            } else {
+                bot.sendMessage(chatId, 'Please provide your address');
+            }
+        });
     });
-});
+
+    bot.onText(/^(0x[a-fA-F0-9]{40})$/, (msg, match) => {
+        const chatId = msg.chat.id;
+        const address = match[1];
+        db.run(`INSERT OR REPLACE INTO users(chat_id, address) VALUES(?, ?)`, [chatId, address], function (err) {
+            if (err) {
+                console.error(err.message);
+                return;
+            }
+            bot.sendMessage(chatId, 'Address received! We will notify you when the swap is complete.');
+        });
+    });
+} else {
+    console.log("TELEGRAM_ID not set.. bot not going to connect.")
+}
 
 function swapComplete(chatId) {
     bot.sendMessage(chatId, 'Your swap is complete!');
