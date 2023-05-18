@@ -88,6 +88,7 @@ async function getNewBlocks(fromBlock) {
     const block_number = Number(await web3.eth.getBlockNumber());
     let deposited_events = [];
     let withdrawn_events = [];
+
     for (let i = fromBlock; i <= block_number; i += 10000) {
         let toBlock = i + 9999;
         if (toBlock > block_number) {
@@ -101,9 +102,11 @@ async function getNewBlocks(fromBlock) {
             fromBlock: i,
             toBlock: toBlock,
         });
+
         deposited_events = deposited_events.concat(new_deposited_events);
         withdrawn_events = withdrawn_events.concat(new_withdrawn_events);
     }
+
     db.serialize(() => {
         if (deposited_events.length != 0) {
             let placeholders = deposited_events.map(() => "(?, ?, ?, ?, ?, ?, ?, ?)").join(", ");
@@ -127,6 +130,7 @@ async function getNewBlocks(fromBlock) {
                 db.run(sql, [withdrawn_events[key].blockNumber, withdrawn_events[key].returnValues["withdrawer"], withdrawn_events[key].returnValues["profit_taking_or_stop_loss"], withdrawn_events[key].returnValues["deposit_id"]]);
             }
         }
+
         let sql = `INSERT INTO fetched_blocks (block_number) VALUES (?);`;
         data = [block_number];
         db.run(sql, data);
@@ -136,7 +140,11 @@ async function getNewBlocks(fromBlock) {
     const withdrawDeposits = [];
 
     for (const deposit of deposits) {
-        const withdrawDeposit = await processDeposit(deposit);
+        let withdrawDeposit = null;
+
+        if(deposit.withdraw_block) {
+            withdrawDeposit = await processDeposit(deposit);
+        }
 
         if(withdrawDeposit) {
             withdrawDeposits.push(withdrawDeposit);
@@ -152,7 +160,7 @@ async function getNewBlocks(fromBlock) {
 
 
 async function processDeposit(deposit) {
-    console.log("processDeposit", deposit);
+    console.log("processDeposit");
 
     let contract = new web3.eth.Contract(POOL_ABI, deposit.pool);
     const reserves = await contract.methods.getReserves().call();
