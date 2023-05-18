@@ -2,6 +2,7 @@ import os
 import uvloop
 import asyncio
 import json
+import time
 from web3 import Web3
 from web3.contract import Contract
 from dotenv import load_dotenv
@@ -16,7 +17,7 @@ async def limit_order_bot_init():
     node: str = os.environ['BNB_NODE']
     w3: Web3 = Web3(Web3.HTTPProvider(node))
     pancakeswap_lob_vyper = os.environ['PANCAKESWAP_LOB_VYPER']
-    pancakeswap_lob_abi = json.loads(os.environ['PANCAKESWAP_LOB_ABI'])
+    pancakeswap_lob_abi = json.loads(os.environ['LOB_ABI'])
     lob_sc: Contract = w3.eth.contract(
         address=pancakeswap_lob_vyper, abi=pancakeswap_lob_abi)
     payload = lob_sc.encodeABI("multiple_withdraw", [[], []])[2:]
@@ -34,10 +35,11 @@ async def limit_order_bot_init():
     job_id = os.environ['PANCAKESWAP_LOB_JOB_ID']
     chain_type = os.environ['PANCAKESWAP_CHAIN_TYPE']
     chain_reference_id = os.environ['PANCAKESWAP_CHAIN_REFERENCE_ID']
-    result = paloma.job_scheduler.create_job(
+    result = await paloma.job_scheduler.create_job(
         wallet, job_id, pancakeswap_lob_vyper, pancakeswap_lob_abi, payload,
         chain_type, chain_reference_id)
     print(result)
+    time.sleep(6)
 
     # Instantiate
     initialize_msg = {
@@ -50,8 +52,8 @@ async def limit_order_bot_init():
         CreateTxOptions(
             msgs=[
                 MsgInstantiateContract(
-                    wallet.key,
-                    wallet.key,
+                    wallet.key.acc_address,
+                    wallet.key.acc_address,
                     int(code_id),
                     job_id,
                     initialize_msg,
@@ -60,7 +62,7 @@ async def limit_order_bot_init():
             ]
         )
     )
-    result = await paloma.tx.broadcast(tx)
+    result = await paloma.tx.broadcast_sync(tx)
     print(result)
 
 
