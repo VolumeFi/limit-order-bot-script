@@ -26,6 +26,8 @@ function convert(deposit) {
 
     if (deposit.amount1) {
         return {
+            "amount0": amount0.toString(),
+            "amount1": amount1.toString(),
             "token0": deposit.token0.toString(),
             "token1": deposit.token1.toString(),
             "stop_loss": (amount1_min / amount0).toString(),
@@ -35,6 +37,8 @@ function convert(deposit) {
         };
     } else {
         return {
+            "amount0": amount0.toString(),
+            "amount1": amount1.toString(),
             "token0": deposit.token0.toString(),
             "token1": deposit.token1.toString(),
             "stop_loss": (amount1_min / amount0).toString(),
