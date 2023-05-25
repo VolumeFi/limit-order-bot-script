@@ -6,12 +6,10 @@ const LCDClient = require('@palomachain/paloma.js').LCDClient;
 const MsgExecuteContract = require('@palomachain/paloma.js').MsgExecuteContract;
 const MnemonicKey = require('@palomachain/paloma.js').MnemonicKey;
 const TelegramBot = require('node-telegram-bot-api');
+const fs = require('fs');
 
 require("dotenv").config();
 
-const BNB_NODE = process.env.BNB_NODE;
-const LOB_VYPER = process.env.PANCAKESWAP_LOB_VYPER;
-const LOB_ABI = JSON.parse(process.env.LOB_ABI);
 const POOL_ABI = JSON.parse(process.env.UNISWAP_V2_POOL_ABI);
 const FROM_BLOCK = process.env.UNISWAP_V3_LOB_VYPER_START;
 
@@ -22,20 +20,33 @@ const LOB_CW = process.env.LOB_CW;
 const WETH = process.env.WETH;
 const VETH = process.env.VETH;
 const SLIPPAGE = process.env.SLIPPAGE;
+
 const DENOMINATOR = 1000;
 const MAX_SIZE = 8;
 const PROFIT_TAKING = 1;
 const STOP_LOSS = 2;
 
-const web3 = new Web3(BNB_NODE);
-const contractInstance = new web3.eth.Contract(LOB_ABI, LOB_VYPER);
+
+const NODES = process.env.NODES.split(",");
+const CONTRACT_ADDRESSES = process.env.CONTRACT_ADDRESSES.split(",");
+const CONTRACT_ABIS = process.env.CONTRACT_ABIS.split(",");
+
+const contractInstances = CONTRACT_ADDRESSES.map((address, index) => {
+    const contractAbiPath = CONTRACT_ABIS[index];
+    const node = NODES[index];
+    const web3 = new Web3(node);
+    const contractAbi = JSON.parse(fs.readFileSync(`./abi/${contractAbiPath}`));
+    return { instance: new web3.eth.Contract(contractAbi, address), node: node, web3: web3};
+});
 
 let db = new sqlite3.Database("./events.db");
+
 db.serialize(() => {
     db.run(
         `CREATE TABLE IF NOT EXISTS fetched_blocks (
             ID INTEGER PRIMARY KEY AUTOINCREMENT,
-            block_number INTEGER
+            block_number INTEGER,
+            node TEXT
         );`
     );
     db.run(
@@ -53,29 +64,17 @@ db.serialize(() => {
             withdraw_type INTEGER,
             withdraw_block INTEGER,
             withdraw_amount TEXT,
-            withdrawer TEXT
+            withdrawer TEXT,
+            chain_id TEXT,
+            deposit_id TEXT,
+            trade_type TEXT,
+            node TEXT
         );`);
     db.run(`CREATE INDEX IF NOT EXISTS deposit_idx ON deposits (deposit_id);`);
 });
 
-try {
-    db.serialize(() => {
-        db.run(
-            `ALTER TABLE deposits 
-                ADD COLUMN chain_id TEXT;`
-        );
-        db.run(
-            `ALTER TABLE deposits 
-                ADD COLUMN deposit_id TEXT;`
-        );
-        db.run(
-            `ALTER TABLE deposits 
-                ADD COLUMN trade_type TEXT;`
-        );
-    });
-} catch (e) { }
 
-// Fetch all deposited order.
+
 // Fetch all withdrawn/canceled order.
 // Find pending orders from above.
 // Find pools list to fetch information.
@@ -84,50 +83,59 @@ try {
 let processing = false;
 let prices = [];
 
-async function getLastBlock() {
+async function getLastBlock(node) {
+    let fromBlock = 0;
+
+    db.get(`SELECT * FROM fetched_blocks WHERE ID = (SELECT MAX(ID) FROM fetched_blocks WHERE node = ?)`, [node], (err, row) => {
+        if (row == undefined) {
+            data = [FROM_BLOCK - 1, node];
+            db.run(`INSERT INTO fetched_blocks (block_number, node) VALUES (?, ?);`, data);
+            fromBlock = Number(FROM_BLOCK);
+        } else {
+            fromBlock = row["block_number"] + 1;
+        }
+
+        return fromBlock;
+    });
+}
+
+async function getNewBlocks() {
     if (processing) {
         return 0
     } else {
         processing = true;
     }
 
-
-    let fromBlock = 0;
-
-    db.get(`SELECT * FROM fetched_blocks WHERE ID = (SELECT MAX(ID) FROM fetched_blocks)`, (err, row) => {
-        if (row == undefined) {
-            data = [FROM_BLOCK - 1];
-            db.run(`INSERT INTO fetched_blocks (block_number) VALUES (?);`, data);
-            fromBlock = Number(FROM_BLOCK);
-        } else {
-            fromBlock = row["block_number"] + 1;
-        }
-        getNewBlocks(fromBlock);
-    });
-}
-
-async function getNewBlocks(fromBlock) {
-    console.log("getNewBlocks", fromBlock);
-    const block_number = Number(await web3.eth.getBlockNumber());
     let deposited_events = [];
     let withdrawn_events = [];
 
-    for (let i = fromBlock; i <= block_number; i += 10000) {
-        let toBlock = i + 9999;
-        if (toBlock > block_number) {
-            toBlock = block_number;
-        }
-        const new_deposited_events = await contractInstance.getPastEvents("Deposited", {
-            fromBlock: i,
-            toBlock: toBlock,
-        });
-        const new_withdrawn_events = await contractInstance.getPastEvents("Withdrawn", {
-            fromBlock: i,
-            toBlock: toBlock,
+    for (const contractInstance of contractInstances) {
+        let fromBlock = await getLastBlock(contractInstance.node);
+        let block_number = Number(await contractInstance.web3.eth.getBlockNumber());
+
+        db.serialize(() => {
+            let sql = `INSERT INTO fetched_blocks (block_number) VALUES (?);`;
+            let data = [block_number];
+            db.run(sql, data);
         });
 
-        deposited_events = deposited_events.concat(new_deposited_events);
-        withdrawn_events = withdrawn_events.concat(new_withdrawn_events);
+        for (let i = fromBlock; i <= block_number; i += 10000) {
+            let toBlock = i + 9999;
+            if (toBlock > block_number) {
+                toBlock = block_number;
+            }
+            const new_deposited_events = await contractInstance.instance.getPastEvents("Deposited", {
+                fromBlock: i,
+                toBlock: toBlock,
+            });
+            const new_withdrawn_events = await contractInstance.instance.getPastEvents("Withdrawn", {
+                fromBlock: i,
+                toBlock: toBlock,
+            });
+
+            deposited_events = deposited_events.concat(new_deposited_events);
+            withdrawn_events = withdrawn_events.concat(new_withdrawn_events);
+        }
     }
     let calls = [];
     let addresses = [];
@@ -180,10 +188,6 @@ async function getNewBlocks(fromBlock) {
                 db.run(sql, [withdrawn_events[key].blockNumber, withdrawn_events[key].returnValues["withdrawer"], withdrawn_events[key].returnValues["withdraw_type"], withdrawn_events[key].returnValues["withdraw_amount"], withdrawn_events[key].returnValues["deposit_id"]]);
             }
         }
-
-        let sql = `INSERT INTO fetched_blocks (block_number) VALUES (?);`;
-        data = [block_number];
-        db.run(sql, data);
     });
 
     const deposits = await getAllDeposits();
@@ -342,7 +346,7 @@ function updatePrice(depositId, price) {
 
 function processDeposits() {
     console.log("process deposits");
-    setInterval(getLastBlock, 3000);
+    setInterval(getNewBlocks, 3000);
 }
 
 
