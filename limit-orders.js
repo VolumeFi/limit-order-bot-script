@@ -58,6 +58,23 @@ db.serialize(() => {
     db.run(`CREATE INDEX IF NOT EXISTS deposit_idx ON deposits (deposit_id);`);
 });
 
+try {
+    db.serialize(() => {
+        db.run(
+            `ALTER TABLE deposits 
+                ADD COLUMN chain_id TEXT;`
+        );
+        db.run(
+            `ALTER TABLE deposits 
+                ADD COLUMN deposit_id TEXT;`
+        );
+        db.run(
+            `ALTER TABLE deposits 
+                ADD COLUMN trade_type TEXT;`
+        );
+    });
+} catch (e) { }
+
 // Fetch all deposited order.
 // Fetch all withdrawn/canceled order.
 // Find pending orders from above.
