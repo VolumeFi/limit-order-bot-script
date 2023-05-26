@@ -16,34 +16,27 @@ app.get('/', (req, res) => {
 });
 
 function convert(deposit) {
-    let amount0 = BigInt(deposit.amount0);
-    let amount1 = null;
-    if (deposit.amount1) {
-        amount1 = BigInt(deposit.amount1);
-    }
-    let amount1_min = BigInt(deposit.amount1_min);
-    let amount1_max = BigInt(deposit.amount1_max);
-
-    if (deposit.amount1) {
+    if (deposit.withdraw_amount) {
         return {
-            "amount0": amount0.toString(),
-            "amount1": amount1.toString(),
+            "amount0": deposit.amount0.toString(),
+            "amount1": deposit.amount1.toString(),
             "token0": deposit.token0.toString(),
             "token1": deposit.token1.toString(),
-            "stop_loss": (amount1_min / amount0).toString(),
-            "profit_taking": (amount1_max / amount0).toString(),
-            "depositor": (deposit.depositor).toString(),
-            "current_price": (amount1 / amount0).toString()
+            "stop_loss": deposit.stop_loss.toString(),
+            "profit_taking": deposit.profit_taking.toString(),
+            "depositor": deposit.depositor.toString(),
+            "withdraw_amount": deposit.withdraw_amount.toString(),
         };
     } else {
         return {
-            "amount0": amount0.toString(),
-            "amount1": amount1.toString(),
+            "amount0": deposit.amount0.toString(),
+            "amount1": deposit.amount1.toString(),
             "token0": deposit.token0.toString(),
             "token1": deposit.token1.toString(),
-            "stop_loss": (amount1_min / amount0).toString(),
-            "profit_taking": (amount1_max / amount0).toString(),
-            "depositor": (deposit.depositor).toString(),
+            "stop_loss": deposit.stop_loss.toString(),
+            "profit_taking": deposit.profit_taking.toString(),
+            "depositor": deposit.depositor.toString(),
+            "current_price": deposit.tracking_price.toString()
         };
     }
 }

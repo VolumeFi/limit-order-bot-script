@@ -1,5 +1,6 @@
 const Web3 = require("web3");
 const {promisify} = require("util");
+const axios = require('axios');
 const sqlite3 = require("sqlite3").verbose();
 const LCDClient = require('@palomachain/paloma.js').LCDClient;
 const MsgExecuteContract = require('@palomachain/paloma.js').MsgExecuteContract;
@@ -21,8 +22,10 @@ const LOB_CW = process.env.LOB_CW;
 const WETH = process.env.WETH;
 const VETH = process.env.VETH;
 const SLIPPAGE = process.env.SLIPPAGE;
-const DENOMINATOR = 10000;
-const MAX_SIZE = 64;
+const DENOMINATOR = 1000;
+const MAX_SIZE = 8;
+const PROFIT_TAKING = 1;
+const STOP_LOSS = 2;
 
 const web3 = new Web3(BNB_NODE);
 const contractInstance = new web3.eth.Contract(LOB_ABI, LOB_VYPER);
@@ -41,13 +44,15 @@ db.serialize(() => {
             token0 TEXT NOT NULL,
             token1 TEXT NOT NULL,
             amount0 TEXT NOT NULL,
-            amount1 TEXT,
-            amount1_min TEXT NOT NULL,
-            amount1_max TEXT NOT NULL,
-            pool TEXT NOT NULL,
+            amount1 TEXT NOT NULL,
             depositor TEXT NOT NULL,
-            profit_taking_or_stop_loss NUMERIC,
+            deposit_price REAL,
+            tracking_price REAL,
+            profit_taking INTEGER,
+            stop_loss INTEGER,
+            withdraw_type INTEGER,
             withdraw_block INTEGER,
+            withdraw_amount TEXT,
             withdrawer TEXT
         );`);
     db.run(`CREATE INDEX IF NOT EXISTS deposit_idx ON deposits (deposit_id);`);
@@ -60,6 +65,7 @@ db.serialize(() => {
 // Fetch all pool information from Uniswap V3.
 // Find executable IDs.
 let processing = false;
+let prices = [];
 
 async function getLastBlock() {
     if (processing) {
@@ -106,28 +112,55 @@ async function getNewBlocks(fromBlock) {
         deposited_events = deposited_events.concat(new_deposited_events);
         withdrawn_events = withdrawn_events.concat(new_withdrawn_events);
     }
-
+    let calls = [];
+    let addresses = [];
+    for (let key in deposited_events) {
+        let token1 = deposited_events[key].returnValues["token1"];
+        if (prices[token1] === undefined) {
+            calls.push(axios({
+                url: `https://api.coingecko.com/api/v3/simple/token_price/binance-smart-chain?contract_addresses=${token1}&vs_currencies=usd`,
+                method: 'get',
+                timeout: 8000,
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            }));
+            addresses.push(token1);
+        }
+    }
+    let responses = await Promise.all(calls);
+    for (let key in responses) {
+        if (responses[key].data[addresses[key]]["usd"]) {
+            prices[addresses[key]] = responses[key].data[addresses[key]]["usd"];
+        }
+    }
+    for (let key in deposited_events) {
+        let token1 = deposited_events[key].returnValues["token1"];
+        deposited_events[key].returnValues["price"] = prices[token1];
+    }
     db.serialize(() => {
         if (deposited_events.length != 0) {
-            let placeholders = deposited_events.map(() => "(?, ?, ?, ?, ?, ?, ?, ?)").join(", ");
-            let sql = `INSERT INTO deposits (deposit_id, token0, token1, amount0, amount1_min, amount1_max, pool, depositor) VALUES ` + placeholders + ";";
+            let placeholders = deposited_events.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").join(", ");
+            let sql = `INSERT INTO deposits (deposit_id, token0, token1, amount0, amount1, depositor, deposit_price, tracking_price, profit_taking, stop_loss) VALUES ` + placeholders + ";";
             let flat_array = [];
             for (let key in deposited_events) {
                 flat_array.push(deposited_events[key].returnValues["deposit_id"]);
                 flat_array.push(deposited_events[key].returnValues["token0"]);
                 flat_array.push(deposited_events[key].returnValues["token1"]);
                 flat_array.push(deposited_events[key].returnValues["amount0"]);
-                flat_array.push(deposited_events[key].returnValues["amount1_min"]);
-                flat_array.push(deposited_events[key].returnValues["amount1_max"]);
-                flat_array.push(deposited_events[key].returnValues["pool"]);
+                flat_array.push(deposited_events[key].returnValues["amount1"]);
                 flat_array.push(deposited_events[key].returnValues["depositor"]);
+                flat_array.push(deposited_events[key].returnValues["price"]);
+                flat_array.push(deposited_events[key].returnValues["price"]);
+                flat_array.push(deposited_events[key].returnValues["profit_taking"]);
+                flat_array.push(deposited_events[key].returnValues["stop_loss"]);
             }
             db.run(sql, flat_array);
         }
         if (withdrawn_events.length != 0) {
-            let sql = `UPDATE deposits SET withdraw_block = ?, withdrawer = ?, profit_taking_or_stop_loss = ? WHERE deposit_id = ?;`;
+            let sql = `UPDATE deposits SET withdraw_block = ?, withdrawer = ?, withdraw_type = ?, withdraw_amount = ? WHERE deposit_id = ?;`;
             for (let key in withdrawn_events) {
-                db.run(sql, [withdrawn_events[key].blockNumber, withdrawn_events[key].returnValues["withdrawer"], withdrawn_events[key].returnValues["profit_taking_or_stop_loss"], withdrawn_events[key].returnValues["deposit_id"]]);
+                db.run(sql, [withdrawn_events[key].blockNumber, withdrawn_events[key].returnValues["withdrawer"], withdrawn_events[key].returnValues["withdraw_type"], withdrawn_events[key].returnValues["withdraw_amount"], withdrawn_events[key].returnValues["deposit_id"]]);
             }
         }
 
@@ -138,17 +171,53 @@ async function getNewBlocks(fromBlock) {
 
     const deposits = await getAllDeposits();
     const withdrawDeposits = [];
+    calls = [];
+    addresses = [];
+    for (let key in deposits) {
+        if (deposits[key].withdraw_block === null) {
+            const token1 = deposits[key].token1;
+            if (prices[token1] === undefined) {
+                calls.push(axios({
+                    url: `https://api.coingecko.com/api/v3/simple/token_price/binance-smart-chain?contract_addresses=${token1}&vs_currencies=usd`,
+                    method: 'get',
+                    timeout: 8000,
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                }));
+                addresses.push(token1);
+            }
+        }
+    }
+    responses = await Promise.all(calls);
+    for (let key in responses) {
+        if (responses[key].data[addresses[key]]["usd"]) {
+            prices[addresses[key]] = responses[key].data[addresses[key]]["usd"];
+        }
+    }
+
+    calls = [];
 
     for (const deposit of deposits) {
         let withdrawDeposit = null;
 
         if(deposit.withdraw_block === null) {
-            withdrawDeposit = await processDeposit(deposit);
+            withdrawDeposit = processDeposit(deposit);
         }
 
         if(withdrawDeposit) {
             withdrawDeposits.push(withdrawDeposit);
+            calls.push(getMinAmount(withdrawDeposit.deposit_id))
         }
+        if (withdrawDeposit.length >= MAX_SIZE) {
+            break;
+        }
+    }
+
+    responses = await Promise.all(calls);
+
+    for (let key in withdrawDeposits) {
+        withdrawDeposits[key]["min_amount0"] = responses[key];
     }
 
     if (withdrawDeposits.length > 0) {
@@ -158,46 +227,22 @@ async function getNewBlocks(fromBlock) {
     processing = false;
 }
 
+async function getMinAmount(deposit_id) {
+    let amount = await contractInstance.methods.withdraw_amount().call();
+    return web3.utils.toBN(amount).mul(web3.utils.toBN(Number(DENOMINATOR) - Number(SLIPPAGE)).div(web3.utils.toBN(DENOMINATOR))).toString();
+}
 
-async function processDeposit(deposit) {
+
+function processDeposit(deposit) {
     console.log("processDeposit");
 
-    let contract = new web3.eth.Contract(POOL_ABI, deposit.pool);
-    const reserves = await contract.methods.getReserves().call();
+    let price = prices[deposit.token1];
 
-    let reserve0 = web3.utils.toBN(reserves._reserve0)
-    let reserve1 = web3.utils.toBN(reserves._reserve1);
-
-    let token0 = deposit.token0;
-    let token1 = deposit.token1;
-
-    if (token0 == VETH) {
-        token0 = WETH;
-    }
-
-    if (token1 == VETH) {
-        token0 = WETH;
-    }
-
-    if (web3.utils.toBN(token0).gt(web3.utils.toBN(token1))) {
-        const swaptemp = reserve0;
-        reserve0 = reserve1;
-        reserve1 = swaptemp;
-    }
-
-    const amount0 = web3.utils.toBN(deposit.amount0);
-    const amount1_min = web3.utils.toBN(deposit.amount1_min).mul(web3.utils.toBN(SLIPPAGE).add(web3.utils.toBN(DENOMINATOR))).div(web3.utils.toBN(DENOMINATOR));
-    const amount1_max = web3.utils.toBN(deposit.amount1_max).mul(web3.utils.toBN(SLIPPAGE).add(web3.utils.toBN(DENOMINATOR))).div(web3.utils.toBN(DENOMINATOR));
-    let amount1 = amount0.mul(reserve1);
-    amount1 = amount1.mul(web3.utils.toBN(997));
-    amount1 = amount1.div(reserve0.mul(web3.utils.toBN(1000)).add(amount0));
-
-    await updateAmount1(deposit.deposit_id, amount1.toString());
-
-    if (amount1.gte(amount1_max)) {
-        return {"deposit_id": Number(deposit.deposit_id), "profit_taking_or_stop_loss": true};
-    } else if (amount1.lte(amount1_min)) {
-        return {"deposit_id": Number(deposit.deposit_id), "profit_taking_or_stop_loss": false};
+    updatePrice(deposit.deposit_id, price);
+    if (Number(price) > Number(deposit.deposit_price) * (Number(DENOMINATOR) + Number(SLIPPAGE) + Number(deposit.profit_taking)) / Number(DENOMINATOR)) {
+        return {"deposit_id": Number(deposit.deposit_id), "withdraw_type": PROFIT_TAKING};
+    } else if (Number(price) < Number(deposit.deposit_price) * (Number(DENOMINATOR) + Number(SLIPPAGE) - Number(deposit.stop_loss)) / Number(DENOMINATOR)) {
+        return {"deposit_id": Number(deposit.deposit_id), "withdraw_type": STOP_LOSS};
     }
 
     return null;
@@ -270,11 +315,11 @@ async function getAllDeposits(depositor = null) {
     }
 }
 
-async function updateAmount1(depositId, newAmount1) {
-    console.log('updateAmount1');
-    await db.run(
-        `UPDATE deposits SET amount1 = ? WHERE deposit_id = ?`,
-        [newAmount1, depositId], null
+function updatePrice(depositId, price) {
+    console.log('updatePrice');
+    db.run(
+        `UPDATE deposits SET tracking_price = ? WHERE deposit_id = ?`,
+        [price, depositId], null
     );
 }
 

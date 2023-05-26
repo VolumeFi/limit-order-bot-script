@@ -20,7 +20,7 @@ async def limit_order_bot_init():
     pancakeswap_lob_abi = json.loads(os.environ['LOB_ABI'])
     lob_sc: Contract = w3.eth.contract(
         address=pancakeswap_lob_vyper, abi=pancakeswap_lob_abi)
-    payload = lob_sc.encodeABI("multiple_withdraw", [[], []])[2:]
+    payload = lob_sc.encodeABI("multiple_withdraw", [[], [], []])[2:]
 
     paloma_lcd = os.environ['PALOMA_LCD']
     paloma_chain_id = os.environ['PALOMA_CHAIN_ID']
