@@ -66,7 +66,6 @@ db.serialize(() => {
             withdraw_amount TEXT,
             withdrawer TEXT,
             chain_id TEXT,
-            deposit_id TEXT,
             trade_type TEXT,
             node TEXT
         );`);
