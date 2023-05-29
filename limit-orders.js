@@ -132,11 +132,18 @@ async function getNewBlocks(fromBlock) {
         }
     }
     let responses = await Promise.all(calls);
-    for (let key in responses) {
-        if (responses[key].data[addresses[key]]["usd"]) {
-            prices[addresses[key]] = responses[key].data[addresses[key]]["usd"];
-        }
+
+    for (const response of responses) {
+        Object.keys(response.data).forEach(value => {
+            let price_index = value;
+            let value_object = response.data[value];
+
+            if(value_object.usd !== undefined) {
+                prices[price_index] = value_object.usd
+            }
+        });
     }
+
     for (let key in deposited_events) {
         let token1 = deposited_events[key].returnValues["token1"];
         if (token1 == VETH) {
@@ -199,10 +206,16 @@ async function getNewBlocks(fromBlock) {
         }
     }
     responses = await Promise.all(calls);
-    for (let key in responses) {
-        if (responses[key].data[addresses[key]]["usd"]) {
-            prices[addresses[key]] = responses[key].data[addresses[key]]["usd"];
-        }
+
+    for (const response of responses) {
+        Object.keys(response.data).forEach(value => {
+            let price_index = value;
+            let value_object = response.data[value];
+
+            if(value_object.usd !== undefined) {
+                prices[price_index] = value_object.usd
+            }
+        });
     }
 
     calls = [];
@@ -218,7 +231,7 @@ async function getNewBlocks(fromBlock) {
             withdrawDeposits.push(withdrawDeposit);
             calls.push(getMinAmount(withdrawDeposit.deposit_id))
         }
-        if (withdrawDeposit.length >= MAX_SIZE) {
+        if (withdrawDeposits.length >= MAX_SIZE) {
             break;
         }
     }
