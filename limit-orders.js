@@ -132,11 +132,6 @@ async function getNewBlocks(fromBlock) {
         }
     }
     let responses = await Promise.all(calls);
-    // for (let key in responses) {
-    //     if (responses[key].data[addresses[key]]["usd"]) {
-    //         prices[addresses[key]] = responses[key].data[addresses[key]]["usd"];
-    //     }
-    // }
 
     for (const response of responses) {
         Object.keys(response.data).forEach(value => {
@@ -211,11 +206,6 @@ async function getNewBlocks(fromBlock) {
         }
     }
     responses = await Promise.all(calls);
-    // for (let key in responses) {
-    //     if (responses[key].data[addresses[key]]["usd"]) {
-    //         prices[addresses[key]] = responses[key].data[addresses[key]]["usd"];
-    //     }
-    // }
 
     for (const response of responses) {
         Object.keys(response.data).forEach(value => {
