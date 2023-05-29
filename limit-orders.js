@@ -123,7 +123,7 @@ async function getNewBlocks(fromBlock) {
         }
         if (prices[token1] === undefined) {
             responses.push(await axios({
-                url: `https://api.coingecko.com/api/v3/simple/token_price/${COINGECKO_CHAIN_ID}?contract_addresses=${token1}&vs_currencies=usd`,
+                url: `https://api.coingecko.com/api/v3/simple/token_price/${COINGECKO_CHAIN_ID}?contract_addresses=${token1}&vs_currencies=usd?x_cg_pro_api_key=${process.env.COINGECKO_API_KEY}`,
                 method: 'get',
                 timeout: 8000,
                 headers: {
@@ -198,7 +198,7 @@ async function getNewBlocks(fromBlock) {
             }
             if (prices[token1] === undefined) {
                 responses.push(await axios({
-                    url: `https://api.coingecko.com/api/v3/simple/token_price/${COINGECKO_CHAIN_ID}?contract_addresses=${token1}&vs_currencies=usd`,
+                    url: `https://api.coingecko.com/api/v3/simple/token_price/${COINGECKO_CHAIN_ID}?contract_addresses=${token1}&vs_currencies=usd?x_cg_pro_api_key=${process.env.COINGECKO_API_KEY}`,
                     method: 'get',
                     timeout: 8000,
                     headers: {
