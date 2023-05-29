@@ -89,6 +89,10 @@ async function getLastBlock() {
     });
 }
 
+function delay(milliseconds) {
+    return new Promise(resolve => setTimeout(resolve, milliseconds));
+}
+
 async function getNewBlocks(fromBlock) {
     console.log("getNewBlocks", fromBlock);
     const block_number = Number(await web3.eth.getBlockNumber());
@@ -131,6 +135,7 @@ async function getNewBlocks(fromBlock) {
                 }
             }));
             addresses.push(token1);
+            await delay(500);
         }
     }
 
@@ -206,6 +211,7 @@ async function getNewBlocks(fromBlock) {
                     }
                 }));
                 addresses.push(token1);
+                await delay(500);
             }
         }
     }
