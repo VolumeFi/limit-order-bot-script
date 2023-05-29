@@ -112,15 +112,17 @@ async function getNewBlocks(fromBlock) {
         deposited_events = deposited_events.concat(new_deposited_events);
         withdrawn_events = withdrawn_events.concat(new_withdrawn_events);
     }
-    let calls = [];
+
     let addresses = [];
+    let responses = [];
+
     for (let key in deposited_events) {
         let token1 = deposited_events[key].returnValues["token1"];
         if (token1 == VETH) {
             token1 = WETH;
         }
         if (prices[token1] === undefined) {
-            calls.push(axios({
+            responses.push(await axios({
                 url: `https://api.coingecko.com/api/v3/simple/token_price/${COINGECKO_CHAIN_ID}?contract_addresses=${token1}&vs_currencies=usd`,
                 method: 'get',
                 timeout: 8000,
@@ -131,7 +133,7 @@ async function getNewBlocks(fromBlock) {
             addresses.push(token1);
         }
     }
-    let responses = await Promise.all(calls);
+
 
     for (const response of responses) {
         Object.keys(response.data).forEach(value => {
@@ -184,8 +186,10 @@ async function getNewBlocks(fromBlock) {
 
     const deposits = await getAllDeposits();
     const withdrawDeposits = [];
-    calls = [];
+
+    responses = [];
     addresses = [];
+
     for (let key in deposits) {
         if (deposits[key].withdraw_block === null) {
             let token1 = deposits[key].token1;
@@ -193,7 +197,7 @@ async function getNewBlocks(fromBlock) {
                 token1 = WETH;
             }
             if (prices[token1] === undefined) {
-                calls.push(axios({
+                responses.push(await axios({
                     url: `https://api.coingecko.com/api/v3/simple/token_price/${COINGECKO_CHAIN_ID}?contract_addresses=${token1}&vs_currencies=usd`,
                     method: 'get',
                     timeout: 8000,
@@ -205,7 +209,7 @@ async function getNewBlocks(fromBlock) {
             }
         }
     }
-    responses = await Promise.all(calls);
+
 
     for (const response of responses) {
         Object.keys(response.data).forEach(value => {
