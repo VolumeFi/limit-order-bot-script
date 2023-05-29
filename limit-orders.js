@@ -10,9 +10,8 @@ const fs = require('fs');
 
 require("dotenv").config();
 
-const POOL_ABI = JSON.parse(process.env.UNISWAP_V2_POOL_ABI);
-const FROM_BLOCK = process.env.UNISWAP_V3_LOB_VYPER_START;
-
+const FROM_BLOCK = process.env.PANCAKESWAP_V2_LOB_VYPER_START;
+const COINGECKO_CHAIN_ID = process.env.COINGECKO_CHAIN_ID;
 const PALOMA_LCD = process.env.PALOMA_LCD;
 const PALOMA_CHAIN_ID = process.env.PALOMA_CHAIN_ID;
 const PALOMA_PRIVATE_KEY = process.env.PALOMA_KEY;
@@ -140,9 +139,12 @@ async function getNewBlocks() {
     let addresses = [];
     for (let key in deposited_events) {
         let token1 = deposited_events[key].returnValues["token1"];
+        if (token1 == VETH) {
+            token1 = WETH;
+        }
         if (prices[token1] === undefined) {
             calls.push(axios({
-                url: `https://api.coingecko.com/api/v3/simple/token_price/binance-smart-chain?contract_addresses=${token1}&vs_currencies=usd`,
+                url: `https://api.coingecko.com/api/v3/simple/token_price/${COINGECKO_CHAIN_ID}?contract_addresses=${token1}&vs_currencies=usd`,
                 method: 'get',
                 timeout: 8000,
                 headers: {
@@ -160,6 +162,9 @@ async function getNewBlocks() {
     }
     for (let key in deposited_events) {
         let token1 = deposited_events[key].returnValues["token1"];
+        if (token1 == VETH) {
+            token1 = WETH;
+        }
         deposited_events[key].returnValues["price"] = prices[token1];
     }
     db.serialize(() => {
@@ -195,10 +200,13 @@ async function getNewBlocks() {
     addresses = [];
     for (let key in deposits) {
         if (deposits[key].withdraw_block === null) {
-            const token1 = deposits[key].token1;
+            let token1 = deposits[key].token1;
+            if (token1 == VETH) {
+                token1 = WETH;
+            }
             if (prices[token1] === undefined) {
                 calls.push(axios({
-                    url: `https://api.coingecko.com/api/v3/simple/token_price/binance-smart-chain?contract_addresses=${token1}&vs_currencies=usd`,
+                    url: `https://api.coingecko.com/api/v3/simple/token_price/${COINGECKO_CHAIN_ID}?contract_addresses=${token1}&vs_currencies=usd`,
                     method: 'get',
                     timeout: 8000,
                     headers: {
@@ -255,8 +263,11 @@ async function getMinAmount(deposit_id) {
 
 function processDeposit(deposit) {
     console.log("processDeposit");
-
-    let price = prices[deposit.token1];
+    let token1 = deposit.token1;
+    if (token1 == VETH) {
+        token1 = WETH;
+    }
+    let price = prices[token1];
 
     updatePrice(deposit.deposit_id, price);
     if (Number(price) > Number(deposit.deposit_price) * (Number(DENOMINATOR) + Number(SLIPPAGE) + Number(deposit.profit_taking)) / Number(DENOMINATOR)) {
