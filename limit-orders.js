@@ -135,7 +135,11 @@ async function getNewBlocks(fromBlock) {
                 }
             }));
             addresses.push(token1);
+
             await delay(500);
+
+            tpm = tpm + 1;
+
         }
     }
 
@@ -211,7 +215,11 @@ async function getNewBlocks(fromBlock) {
                     }
                 }));
                 addresses.push(token1);
+
                 await delay(500);
+
+                tpm = tpm + 1;
+
             }
         }
     }
@@ -363,6 +371,14 @@ function processDeposits() {
     setInterval(getLastBlock, 3000);
 }
 
+let tpm = 0;
+
+function trans_per_minute() {
+    console.log(`tpm: ${tpm}`);
+    tpm = 0;
+}
+
+setInterval(trans_per_minute, 60 * 1000);
 
 if (process.env.TELEGRAM_ID) {
     const token = process.env.TELEGRAM_ID;
