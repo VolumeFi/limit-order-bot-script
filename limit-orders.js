@@ -252,7 +252,7 @@ async function getNewBlocks(fromBlock) {
         });
     }
 
-    calls = [];
+    let calls = [];
 
     for (const deposit of deposits) {
         let withdrawDeposit = null;
