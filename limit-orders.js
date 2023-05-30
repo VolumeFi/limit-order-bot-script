@@ -100,7 +100,7 @@ async function retryAxiosRequest(url, method, timeout, headers, maxRetries) {
             return response;
         } catch(err) {
             console.error(`Attempt ${i+1} failed. Retrying... in 10 second`);
-            await delay(60000);
+            await delay(10);
         }
     }
     throw new Error('Maximum retries exceeded');
@@ -140,7 +140,7 @@ async function getNewBlocks(fromBlock) {
         }
         if (prices[token1] === undefined) {
             responses.push(await retryAxiosRequest(
-                 `https://api.coingecko.com/api/v3/simple/token_price/${COINGECKO_CHAIN_ID}?contract_addresses=${token1}&vs_currencies=usd?x_cg_pro_api_key=${process.env.COINGECKO_API_KEY}`,
+                 `https://pro-api.coingecko.com/api/v3/simple/token_price/${COINGECKO_CHAIN_ID}?contract_addresses=${token1}&vs_currencies=usd?x_cg_pro_api_key=${process.env.COINGECKO_API_KEY}`,
                  'get',
                 8000,
                  {
@@ -221,7 +221,7 @@ async function getNewBlocks(fromBlock) {
             }
             if (prices[token1] === undefined) {
                 responses.push(await retryAxiosRequest(
-                    `https://api.coingecko.com/api/v3/simple/token_price/${COINGECKO_CHAIN_ID}?contract_addresses=${token1}&vs_currencies=usd?x_cg_pro_api_key=${process.env.COINGECKO_API_KEY}`,
+                    `https://pro-api.coingecko.com/api/v3/simple/token_price/${COINGECKO_CHAIN_ID}?contract_addresses=${token1}&vs_currencies=usd?x_cg_pro_api_key=${process.env.COINGECKO_API_KEY}`,
                     'get',
                     8000,
                      {
