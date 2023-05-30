@@ -99,8 +99,8 @@ async function retryAxiosRequest(url, method, timeout, headers, maxRetries) {
             const response = await axios({ url, method, timeout, headers });
             return response;
         } catch(err) {
-            console.error(`Attempt ${i+1} failed. Retrying... in 1 second`);
-            await delay(1000);
+            console.error(`Attempt ${i+1} failed. Retrying... in 10 second`);
+            await delay(10000);
         }
     }
     throw new Error('Maximum retries exceeded');
