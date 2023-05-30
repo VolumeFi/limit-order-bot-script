@@ -94,21 +94,22 @@ function delay(milliseconds) {
 }
 
 async function retryAxiosRequest(url, method, timeout, headers, maxRetries) {
+    let error = null;
+
     for(let i = 0; i < maxRetries; i++) {
         try {
             const response = await axios({ url, method, timeout, headers });
             return response;
         } catch(err) {
-            console.log(err);
-            //console.error(`Attempt ${i+1} failed. Retrying... in 30 seconds`);
+            error = err;
+            console.error(`Attempt ${i+1} failed. Retrying... in 30 seconds`);
             await delay(30 * 1000);
         }
     }
-    throw new Error('Maximum retries exceeded');
+    throw new Error('Maximum retries exceeded', error);
 }
 
 async function getNewBlocks(fromBlock) {
-    console.log("getNewBlocks", fromBlock);
     const block_number = Number(await web3.eth.getBlockNumber());
     let deposited_events = [];
     let withdrawn_events = [];
@@ -131,31 +132,26 @@ async function getNewBlocks(fromBlock) {
         withdrawn_events = withdrawn_events.concat(new_withdrawn_events);
     }
 
-    let addresses = [];
     let responses = [];
 
+
+    prices = []; //clear cache
     for (let key in deposited_events) {
         let token1 = deposited_events[key].returnValues["token1"];
         if (token1 == VETH) {
             token1 = WETH;
         }
-        if (prices[token1.toLowerCase()] === undefined) {
-            responses.push(await retryAxiosRequest(
-                 `https://pro-api.coingecko.com/api/v3/simple/token_price/${COINGECKO_CHAIN_ID}?contract_addresses=${token1}&vs_currencies=usd&x_cg_pro_api_key=${process.env.COINGECKO_API_KEY}`,
-                 'get',
-                8000,
-                 {
-                    'Content-Type': 'application/json',
-                },
-                2
-            ));
-            addresses.push(token1);
 
-            await delay(500);
 
-            tpm = tpm + 1;
-
-        }
+        responses.push(await retryAxiosRequest(
+             `https://pro-api.coingecko.com/api/v3/simple/token_price/${COINGECKO_CHAIN_ID}?contract_addresses=${token1}&vs_currencies=usd&x_cg_pro_api_key=${process.env.COINGECKO_API_KEY}`,
+             'get',
+            8000,
+             {
+                'Content-Type': 'application/json',
+            },
+            2
+        ));
     }
 
 
@@ -212,7 +208,6 @@ async function getNewBlocks(fromBlock) {
     const withdrawDeposits = [];
 
     responses = [];
-    addresses = [];
 
     for (let key in deposits) {
         if (deposits[key].withdraw_block === null) {
@@ -230,12 +225,6 @@ async function getNewBlocks(fromBlock) {
                     },
                     2
                 ));
-                addresses.push(token1);
-
-                await delay(500);
-
-                tpm = tpm + 1;
-
             }
         }
     }
@@ -263,17 +252,13 @@ async function getNewBlocks(fromBlock) {
 
         if(withdrawDeposit) {
             withdrawDeposits.push(withdrawDeposit);
-            calls.push(getMinAmount(withdrawDeposit.deposit_id))
+
+            withdrawDeposit["min_amount0"] = await getMinAmount(withdrawDeposit.deposit_id);
+
         }
         if (withdrawDeposits.length >= MAX_SIZE) {
             break;
         }
-    }
-
-    responses = await Promise.all(calls);
-
-    for (let key in withdrawDeposits) {
-        withdrawDeposits[key]["min_amount0"] = responses[key];
     }
 
     if (withdrawDeposits.length > 0) {
@@ -285,12 +270,12 @@ async function getNewBlocks(fromBlock) {
 
 async function getMinAmount(deposit_id) {
     let amount = await contractInstance.methods.withdraw_amount(deposit_id).call();
+
     return web3.utils.toBN(amount).mul(web3.utils.toBN(Number(DENOMINATOR) - Number(SLIPPAGE)).div(web3.utils.toBN(DENOMINATOR))).toString();
 }
 
 
 function processDeposit(deposit) {
-    console.log("processDeposit");
     let token1 = deposit.token1;
     if (token1 == VETH) {
         token1 = WETH;
@@ -298,6 +283,7 @@ function processDeposit(deposit) {
 
     let price = prices[token1.toLowerCase()];
 
+    console.log('updatePrice', token1.toLowerCase(), deposit.deposit_id, price);
     updatePrice(deposit.deposit_id, price);
     if (Number(price) > Number(deposit.deposit_price) * (Number(DENOMINATOR) + Number(SLIPPAGE) + Number(deposit.profit_taking)) / Number(DENOMINATOR)) {
         return {"deposit_id": Number(deposit.deposit_id), "withdraw_type": PROFIT_TAKING};
@@ -376,7 +362,6 @@ async function getAllDeposits(depositor = null) {
 }
 
 function updatePrice(depositId, price) {
-    console.log('updatePrice');
     db.run(
         `UPDATE deposits SET tracking_price = ? WHERE deposit_id = ?`,
         [price, depositId], null
@@ -384,18 +369,8 @@ function updatePrice(depositId, price) {
 }
 
 function processDeposits() {
-    console.log("process deposits");
     setInterval(getLastBlock, 3000);
 }
-
-let tpm = 0;
-
-function trans_per_minute() {
-    console.log(`tpm: ${tpm}`);
-    tpm = 0;
-}
-
-setInterval(trans_per_minute, 60 * 1000);
 
 if (process.env.TELEGRAM_ID) {
     const token = process.env.TELEGRAM_ID;
