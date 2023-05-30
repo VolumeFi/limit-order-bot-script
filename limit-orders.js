@@ -263,7 +263,7 @@ async function getNewBlocks(fromBlock) {
 
         if(withdrawDeposit) {
             withdrawDeposits.push(withdrawDeposit);
-            calls.push(getMinAmount(withdrawDeposit.deposit_id))
+            calls.push(getMinAmount(withdrawDeposit.amount1))
         }
         if (withdrawDeposits.length >= MAX_SIZE) {
             break;
@@ -283,8 +283,8 @@ async function getNewBlocks(fromBlock) {
     processing = false;
 }
 
-async function getMinAmount(deposit_id) {
-    let amount = await contractInstance.methods.withdraw_amount().call();
+async function getMinAmount(amount1) {
+    let amount = await contractInstance.methods.withdraw_amount(amount1).call();
     return web3.utils.toBN(amount).mul(web3.utils.toBN(Number(DENOMINATOR) - Number(SLIPPAGE)).div(web3.utils.toBN(DENOMINATOR))).toString();
 }
 
