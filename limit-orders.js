@@ -65,7 +65,7 @@ db.serialize(() => {
 // Fetch all pool information from Uniswap V3.
 // Find executable IDs.
 let processing = false;
-let prices = [];
+let prices = {};
 
 async function getLastBlock() {
     if (processing) {
@@ -139,7 +139,7 @@ async function getNewBlocks(fromBlock) {
         if (token1 == VETH) {
             token1 = WETH;
         }
-        if (prices[token1] === undefined) {
+        if (prices[token1.toLowerCase()] === undefined) {
             responses.push(await retryAxiosRequest(
                  `https://pro-api.coingecko.com/api/v3/simple/token_price/${COINGECKO_CHAIN_ID}?contract_addresses=${token1}&vs_currencies=usd&x_cg_pro_api_key=${process.env.COINGECKO_API_KEY}`,
                  'get',
@@ -175,7 +175,7 @@ async function getNewBlocks(fromBlock) {
         if (token1 == VETH) {
             token1 = WETH;
         }
-        deposited_events[key].returnValues["price"] = prices[token1];
+        deposited_events[key].returnValues["price"] = prices[token1.toLowerCase()];
     }
     db.serialize(() => {
         if (deposited_events.length != 0) {
@@ -220,7 +220,7 @@ async function getNewBlocks(fromBlock) {
             if (token1 == VETH) {
                 token1 = WETH;
             }
-            if (prices[token1] === undefined) {
+            if (prices[token1.toLowerCase()] === undefined) {
                 responses.push(await retryAxiosRequest(
                     `https://pro-api.coingecko.com/api/v3/simple/token_price/${COINGECKO_CHAIN_ID}?contract_addresses=${token1}&vs_currencies=usd&x_cg_pro_api_key=${process.env.COINGECKO_API_KEY}`,
                     'get',
@@ -295,7 +295,8 @@ function processDeposit(deposit) {
     if (token1 == VETH) {
         token1 = WETH;
     }
-    let price = prices[token1];
+
+    let price = prices[token1.toLowerCase()];
 
     updatePrice(deposit.deposit_id, price);
     if (Number(price) > Number(deposit.deposit_price) * (Number(DENOMINATOR) + Number(SLIPPAGE) + Number(deposit.profit_taking)) / Number(DENOMINATOR)) {
