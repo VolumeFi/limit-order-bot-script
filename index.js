@@ -16,29 +16,15 @@ app.get('/', (req, res) => {
 });
 
 function convert(deposit) {
-    if (deposit.withdraw_amount) {
-        return {
-            "amount0": deposit.amount0.toString(),
-            "amount1": deposit.amount1.toString(),
-            "token0": deposit.token0.toString(),
-            "token1": deposit.token1.toString(),
-            "stop_loss": deposit.stop_loss.toString(),
-            "profit_taking": deposit.profit_taking.toString(),
-            "depositor": deposit.depositor.toString(),
-            "withdraw_amount": deposit.withdraw_amount.toString(),
-        };
-    } else {
-        return {
-            "amount0": deposit.amount0.toString(),
-            "amount1": deposit.amount1.toString(),
-            "token0": deposit.token0.toString(),
-            "token1": deposit.token1.toString(),
-            "stop_loss": deposit.stop_loss.toString(),
-            "profit_taking": deposit.profit_taking.toString(),
-            "depositor": deposit.depositor.toString(),
-            "current_price": deposit.tracking_price.toString()
-        };
+    let result = {};
+
+    for (let key in deposit) {
+        if (deposit[key] !== null) {
+            result[key] = String(deposit[key]);
+        }
     }
+
+    return result;
 }
 
 app.get('/robots', async (req, res) => {
