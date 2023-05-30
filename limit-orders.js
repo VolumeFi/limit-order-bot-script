@@ -93,6 +93,19 @@ function delay(milliseconds) {
     return new Promise(resolve => setTimeout(resolve, milliseconds));
 }
 
+async function retryAxiosRequest(url, method, timeout, headers, maxRetries) {
+    for(let i = 0; i < maxRetries; i++) {
+        try {
+            const response = await axios({ url, method, timeout, headers });
+            return response;
+        } catch(err) {
+            console.error(`Attempt ${i+1} failed. Retrying... in 1 second`);
+            await delay(1000);
+        }
+    }
+    throw new Error('Maximum retries exceeded');
+}
+
 async function getNewBlocks(fromBlock) {
     console.log("getNewBlocks", fromBlock);
     const block_number = Number(await web3.eth.getBlockNumber());
@@ -126,14 +139,15 @@ async function getNewBlocks(fromBlock) {
             token1 = WETH;
         }
         if (prices[token1] === undefined) {
-            responses.push(await axios({
-                url: `https://api.coingecko.com/api/v3/simple/token_price/${COINGECKO_CHAIN_ID}?contract_addresses=${token1}&vs_currencies=usd?x_cg_pro_api_key=${process.env.COINGECKO_API_KEY}`,
-                method: 'get',
-                timeout: 8000,
-                headers: {
+            responses.push(await retryAxiosRequest(
+                 `https://api.coingecko.com/api/v3/simple/token_price/${COINGECKO_CHAIN_ID}?contract_addresses=${token1}&vs_currencies=usd?x_cg_pro_api_key=${process.env.COINGECKO_API_KEY}`,
+                 'get',
+                8000,
+                 {
                     'Content-Type': 'application/json',
-                }
-            }));
+                },
+                2
+            ));
             addresses.push(token1);
 
             await delay(500);
@@ -206,14 +220,15 @@ async function getNewBlocks(fromBlock) {
                 token1 = WETH;
             }
             if (prices[token1] === undefined) {
-                responses.push(await axios({
-                    url: `https://api.coingecko.com/api/v3/simple/token_price/${COINGECKO_CHAIN_ID}?contract_addresses=${token1}&vs_currencies=usd?x_cg_pro_api_key=${process.env.COINGECKO_API_KEY}`,
-                    method: 'get',
-                    timeout: 8000,
-                    headers: {
+                responses.push(await retryAxiosRequest(
+                    `https://api.coingecko.com/api/v3/simple/token_price/${COINGECKO_CHAIN_ID}?contract_addresses=${token1}&vs_currencies=usd?x_cg_pro_api_key=${process.env.COINGECKO_API_KEY}`,
+                    'get',
+                    8000,
+                     {
                         'Content-Type': 'application/json',
-                    }
-                }));
+                    },
+                    2
+                ));
                 addresses.push(token1);
 
                 await delay(500);
