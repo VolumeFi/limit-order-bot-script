@@ -271,7 +271,7 @@ async function getNewBlocks(fromBlock) {
 async function getMinAmount(deposit_id) {
     let amount = await contractInstance.methods.withdraw_amount(deposit_id).call();
 
-    return web3.utils.toBN(amount).mul(web3.utils.toBN(Number(DENOMINATOR) - Number(SLIPPAGE)).div(web3.utils.toBN(DENOMINATOR))).toString();
+    return web3.utils.toBN(amount).mul(web3.utils.toBN(Number(DENOMINATOR) - Number(SLIPPAGE))).div(web3.utils.toBN(DENOMINATOR)).toString();
 }
 
 
