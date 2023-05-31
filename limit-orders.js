@@ -389,9 +389,11 @@ function processDeposits() {
     setInterval(getLastBlock, 3000);
 }
 
+let bot = null;
+
 if (process.env.TELEGRAM_ID) {
     const token = process.env.TELEGRAM_ID;
-    const bot = new TelegramBot(token, {polling: true});
+    bot = new TelegramBot(token, {polling: true});
 
     bot.on('message', (msg) => {
         const chatId = msg.chat.id;
@@ -424,7 +426,9 @@ if (process.env.TELEGRAM_ID) {
 }
 
 function swapComplete(chatId) {
-    bot.sendMessage(chatId, 'Your swap is complete!');
+    if(bot !== null) {
+        bot.sendMessage(chatId, 'Your swap is complete!');
+    }
 }
 
 module.exports = {
