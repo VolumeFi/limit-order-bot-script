@@ -56,6 +56,23 @@ db.serialize(() => {
             withdrawer TEXT
         );`);
     db.run(`CREATE INDEX IF NOT EXISTS deposit_idx ON deposits (deposit_id);`);
+
+    db.run(`CREATE TABLE IF NOT EXISTS users(
+    chat_id TEXT PRIMARY KEY,
+    address TEXT NOT NULL
+    )`);
+
+    db.run(`
+    CREATE TABLE IF NOT EXISTS Deposited (
+        deposit_id TEXT,
+        token0 TEXT,
+        token1 TEXT,
+        amount0 TEXT,
+        amount1_min TEXT,
+        amount1_max TEXT,
+        pool TEXT,
+        depositor TEXT    
+    )`);
 });
 
 // Fetch all deposited order.
