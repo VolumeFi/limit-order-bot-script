@@ -386,7 +386,7 @@ function updatePrice(depositId, price) {
 }
 
 function processDeposits() {
-    setInterval(getLastBlock, 3000);
+    setInterval(getLastBlock, 1000 * 60 * 2);
 }
 
 let bot = null;
@@ -426,8 +426,10 @@ if (process.env.TELEGRAM_ID) {
 }
 
 function swapComplete(chatId) {
-    if(bot !== null) {
-        bot.sendMessage(chatId, 'Your swap is complete!');
+    if(chatId !== undefined) {
+        if (bot !== null) {
+            bot.sendMessage(chatId, 'Your swap is complete!');
+        }
     }
 }
 
