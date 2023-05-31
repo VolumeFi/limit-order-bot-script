@@ -56,6 +56,23 @@ db.serialize(() => {
             withdrawer TEXT
         );`);
     db.run(`CREATE INDEX IF NOT EXISTS deposit_idx ON deposits (deposit_id);`);
+
+    db.run(`CREATE TABLE IF NOT EXISTS users(
+    chat_id TEXT PRIMARY KEY,
+    address TEXT NOT NULL
+)`);
+
+    db.run(`
+    CREATE TABLE IF NOT EXISTS Deposited (
+        deposit_id TEXT,
+        token0 TEXT,
+        token1 TEXT,
+        amount0 TEXT,
+        amount1_min TEXT,
+        amount1_max TEXT,
+        pool TEXT,
+        depositor TEXT    
+)`);
 });
 
 // Fetch all deposited order.
@@ -296,36 +313,42 @@ function processDeposit(deposit) {
 
 async function executeWithdraw(deposits) {
     console.log("executeWithdraw", deposits);
-    const lcd = new LCDClient({
-        URL: PALOMA_LCD,
-        chainID: PALOMA_CHAIN_ID,
-        classic: true,
-    });
-    const mk = new MnemonicKey({
-        mnemonic: PALOMA_PRIVATE_KEY,
-    });
-    const wallet = lcd.wallet(mk);
-    const msg = new MsgExecuteContract(
-        wallet.key.accAddress,
-        LOB_CW,
-        {"put_withdraw": {"deposits": deposits}}
-    );
-
     let result = null;
 
     try {
-        const tx = await wallet.createAndSignTx({msgs: [msg]});
-        result = await lcd.tx.broadcast(tx);
+        const lcd = new LCDClient({
+            URL: PALOMA_LCD,
+            chainID: PALOMA_CHAIN_ID,
+            classic: true,
+        });
+        const mk = new MnemonicKey({
+            mnemonic: PALOMA_PRIVATE_KEY,
+        });
+        const wallet = lcd.wallet(mk);
+        const msg = new MsgExecuteContract(
+            wallet.key.accAddress,
+            LOB_CW,
+            {"put_withdraw": {"deposits": deposits}}
+        );
+
 
         try {
-            deposits.forEach(deposit => {
-                swapComplete(getChatIdByAddress(deposit.deposit_id));
-            });
+            const tx = await wallet.createAndSignTx({msgs: [msg]});
+            result = await lcd.tx.broadcast(tx);
+
+            try {
+                deposits.forEach(deposit => {
+                    swapComplete(getChatIdByAddress(deposit.deposit_id));
+                });
+            } catch (e) {
+                console.log(e);
+            }
         } catch (e) {
             console.log(e);
         }
     } catch (e) {
         console.log(e);
+        result = e;
     }
 
     return result;
