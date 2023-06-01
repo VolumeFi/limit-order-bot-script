@@ -253,7 +253,7 @@ async function getNewBlocks(fromBlock) {
         if(withdrawDeposit) {
             withdrawDeposits.push(withdrawDeposit);
 
-            withdrawDeposit["min_amount0"] = await getMinAmount(withdrawDeposit.deposit_id);
+            withdrawDeposit["min_amount0"] = await getMinAmount(withdrawDeposit.depositor, withdrawDeposit.deposit_id);
 
         }
         if (withdrawDeposits.length >= MAX_SIZE) {
@@ -268,8 +268,8 @@ async function getNewBlocks(fromBlock) {
     processing = false;
 }
 
-async function getMinAmount(deposit_id) {
-    let amount = await contractInstance.methods.withdraw_amount(deposit_id).call();
+async function getMinAmount(depositor, deposit_id) {
+    let amount = await contractInstance.methods.cancel(deposit_id).call({from: depositor});
 
     return web3.utils.toBN(amount).mul(web3.utils.toBN(Number(DENOMINATOR) - Number(SLIPPAGE))).div(web3.utils.toBN(DENOMINATOR)).toString();
 }
@@ -286,9 +286,9 @@ function processDeposit(deposit) {
     console.log('updatePrice', token1.toLowerCase(), deposit.deposit_id, price);
     updatePrice(deposit.deposit_id, price);
     if (Number(price) > Number(deposit.deposit_price) * (Number(DENOMINATOR) + Number(SLIPPAGE) + Number(deposit.profit_taking)) / Number(DENOMINATOR)) {
-        return {"deposit_id": Number(deposit.deposit_id), "withdraw_type": PROFIT_TAKING};
+        return {"depositor": deposit.depositor, "deposit_id": Number(deposit.deposit_id), "withdraw_type": PROFIT_TAKING};
     } else if (Number(price) < Number(deposit.deposit_price) * (Number(DENOMINATOR) + Number(SLIPPAGE) - Number(deposit.stop_loss)) / Number(DENOMINATOR)) {
-        return {"deposit_id": Number(deposit.deposit_id), "withdraw_type": STOP_LOSS};
+        return {"depositor": deposit.depositor, "deposit_id": Number(deposit.deposit_id), "withdraw_type": STOP_LOSS};
     }
 
     return null;
