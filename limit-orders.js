@@ -17,7 +17,6 @@ const PALOMA_LCD = process.env.PALOMA_LCD;
 const PALOMA_CHAIN_ID = process.env.PALOMA_CHAIN_ID;
 const PALOMA_PRIVATE_KEY = process.env.PALOMA_KEY;
 const LOB_CW = process.env.LOB_CW;
-const WETH = process.env.WETH;
 const VETH = process.env.VETH;
 const SLIPPAGE = process.env.SLIPPAGE;
 const DENOMINATOR = 1000;
@@ -27,7 +26,7 @@ const STOP_LOSS = 2;
 
 
 
-
+let WETH = null;
 let web3 = null;
 let contractInstance = null;
 let COINGECKO_CHAIN_ID = null;
@@ -44,7 +43,8 @@ async function setupConnections() {
             web3: web3,
             contractInstance: new web3.eth.Contract(JSON.parse(config.ABI), config.VYPER),
             coingeckoChainId: config.COINGECKO_CHAIN_ID,
-            networkName: config.NETWORK_NAME
+            networkName: config.NETWORK_NAME,
+            weth: config.WETH
         };
     });
 }
@@ -127,6 +127,7 @@ async function getLastBlock() {
         contractInstance = connection.contractInstance;
         COINGECKO_CHAIN_ID = connection.coingeckoChainId;
         networkName = connection.networkName;
+        WETH = connection.weth;
 
         try {
             const row = await db.getAsync(`SELECT * FROM fetched_blocks WHERE network_name = ? AND ID = (SELECT MAX(ID) FROM fetched_blocks WHERE network_name = ?)`, [networkName, networkName]);
