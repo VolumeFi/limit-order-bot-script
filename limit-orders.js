@@ -61,18 +61,6 @@ db.serialize(() => {
     chat_id TEXT PRIMARY KEY,
     address TEXT NOT NULL
     )`);
-
-    db.run(`
-    CREATE TABLE IF NOT EXISTS Deposited (
-        deposit_id TEXT,
-        token0 TEXT,
-        token1 TEXT,
-        amount0 TEXT,
-        amount1_min TEXT,
-        amount1_max TEXT,
-        pool TEXT,
-        depositor TEXT    
-    )`);
 });
 
 // Fetch all deposited order.
@@ -286,7 +274,7 @@ async function getNewBlocks(fromBlock) {
 }
 
 async function getMinAmount(depositor, deposit_id) {
-    let amount = await contractInstance.methods.cancel(deposit_id).call({from: depositor});
+    let amount = await contractInstance.methods.cancel(deposit_id, 0).call({from: depositor});
 
     return web3.utils.toBN(amount).mul(web3.utils.toBN(Number(DENOMINATOR) - Number(SLIPPAGE))).div(web3.utils.toBN(DENOMINATOR)).toString();
 }
@@ -303,9 +291,9 @@ function processDeposit(deposit) {
     console.log('updatePrice', token1.toLowerCase(), deposit.deposit_id, price);
     updatePrice(deposit.deposit_id, price);
     if (Number(price) > Number(deposit.deposit_price) * (Number(DENOMINATOR) + Number(SLIPPAGE) + Number(deposit.profit_taking)) / Number(DENOMINATOR)) {
-        return {"depositor": deposit.depositor, "deposit_id": Number(deposit.deposit_id), "withdraw_type": PROFIT_TAKING};
+        return { "deposit_id": Number(deposit.deposit_id), "withdraw_type": PROFIT_TAKING};
     } else if (Number(price) < Number(deposit.deposit_price) * (Number(DENOMINATOR) + Number(SLIPPAGE) - Number(deposit.stop_loss)) / Number(DENOMINATOR)) {
-        return {"depositor": deposit.depositor, "deposit_id": Number(deposit.deposit_id), "withdraw_type": STOP_LOSS};
+        return { "deposit_id": Number(deposit.deposit_id), "withdraw_type": STOP_LOSS};
     }
 
     return null;
@@ -386,7 +374,7 @@ function updatePrice(depositId, price) {
 }
 
 function processDeposits() {
-    setInterval(getLastBlock, 1000 * 60 * 2);
+    setInterval(getLastBlock, 1000 * 10);
 }
 
 let bot = null;
