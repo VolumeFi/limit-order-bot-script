@@ -264,8 +264,8 @@ async function getNewBlocks(fromBlock) {
             }
         }
 
-        let sql = `INSERT INTO fetched_blocks (block_number) VALUES (?);`;
-        let data = [block_number];
+        let sql = `INSERT INTO fetched_blocks (block_number, network_name) VALUES (?, ?);`;
+        let data = [block_number, networkName];
         db.run(sql, data);
     });
 
@@ -435,7 +435,7 @@ function updatePrice(depositId, price) {
 }
 
 function processDeposits() {
-    setInterval(getLastBlock, 1000 * 10);
+    setInterval(getLastBlock, 1000 * 1);
 }
 
 let bot = null;
