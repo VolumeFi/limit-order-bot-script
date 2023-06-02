@@ -10,13 +10,13 @@ const fs = require('fs').promises;
 
 require("dotenv").config();
 
-const FROM_BLOCK = process.env.PANCAKESWAP_V2_LOB_VYPER_START;
+
 
 
 const PALOMA_LCD = process.env.PALOMA_LCD;
 const PALOMA_CHAIN_ID = process.env.PALOMA_CHAIN_ID;
 const PALOMA_PRIVATE_KEY = process.env.PALOMA_KEY;
-const LOB_CW = process.env.LOB_CW;
+
 const VETH = process.env.VETH;
 const SLIPPAGE = process.env.SLIPPAGE;
 const DENOMINATOR = 1000;
@@ -32,6 +32,8 @@ let contractInstance = null;
 let COINGECKO_CHAIN_ID = null;
 let networkName = null;
 let connections = null;
+let FROM_BLOCK = null;
+let LOB_CW = null;
 
 async function setupConnections() {
     const data = await fs.readFile('./networks.json', 'utf8');
@@ -44,7 +46,9 @@ async function setupConnections() {
             contractInstance: new web3.eth.Contract(JSON.parse(config.ABI), config.VYPER),
             coingeckoChainId: config.COINGECKO_CHAIN_ID,
             networkName: config.NETWORK_NAME,
-            weth: config.WETH
+            weth: config.WETH,
+            fromBlock: config.FROM_BLOCK,
+            cw: config.CW
         };
     });
 }
@@ -128,6 +132,8 @@ async function getLastBlock() {
         COINGECKO_CHAIN_ID = connection.coingeckoChainId;
         networkName = connection.networkName;
         WETH = connection.weth;
+        FROM_BLOCK = connection.fromBlock;
+        LOB_CW = connection.cw;
 
         try {
             const row = await db.getAsync(`SELECT * FROM fetched_blocks WHERE network_name = ? AND ID = (SELECT MAX(ID) FROM fetched_blocks WHERE network_name = ?)`, [networkName, networkName]);
