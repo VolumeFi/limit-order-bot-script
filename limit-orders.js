@@ -6,15 +6,13 @@ const LCDClient = require('@palomachain/paloma.js').LCDClient;
 const MsgExecuteContract = require('@palomachain/paloma.js').MsgExecuteContract;
 const MnemonicKey = require('@palomachain/paloma.js').MnemonicKey;
 const TelegramBot = require('node-telegram-bot-api');
+const fs = require('fs').promises;
 
 require("dotenv").config();
 
-const BNB_NODE = process.env.BNB_NODE;
-const LOB_VYPER = process.env.PANCAKESWAP_LOB_VYPER;
-const LOB_ABI = JSON.parse(process.env.LOB_ABI);
 const FROM_BLOCK = process.env.PANCAKESWAP_V2_LOB_VYPER_START;
 
-const COINGECKO_CHAIN_ID = process.env.COINGECKO_CHAIN_ID;
+
 const PALOMA_LCD = process.env.PALOMA_LCD;
 const PALOMA_CHAIN_ID = process.env.PALOMA_CHAIN_ID;
 const PALOMA_PRIVATE_KEY = process.env.PALOMA_KEY;
@@ -27,8 +25,31 @@ const MAX_SIZE = 8;
 const PROFIT_TAKING = 1;
 const STOP_LOSS = 2;
 
-const web3 = new Web3(BNB_NODE);
-const contractInstance = new web3.eth.Contract(LOB_ABI, LOB_VYPER);
+
+
+
+let web3 = null;
+let contractInstance = null;
+let COINGECKO_CHAIN_ID = null;
+let networkName = null;
+let connections = null;
+
+async function setupConnections() {
+    const data = await fs.readFile('./networks.json', 'utf8');
+    const configs = JSON.parse(data);
+
+    connections = configs.map(config => {
+        const web3 = new Web3(config.NODE);
+        return {
+            web3: web3,
+            contractInstance: new web3.eth.Contract(JSON.parse(config.ABI), config.VYPER),
+            coingeckoChainId: config.COINGECKO_CHAIN_ID,
+            networkName: config.NETWORK_NAME
+        };
+    });
+}
+
+setupConnections().then(r => {});
 
 let db = new sqlite3.Database("./events.db");
 db.serialize(() => {
@@ -61,7 +82,28 @@ db.serialize(() => {
     chat_id TEXT PRIMARY KEY,
     address TEXT NOT NULL
     )`);
+
+    db.run(
+        `ALTER TABLE fetched_blocks ADD COLUMN network_name TEXT;`,
+        function(err) {
+            if (err) {
+                console.log("Column 'network_name' already exists in 'fetched_blocks'.");
+            }
+        }
+    );
+
+    db.run(
+        `ALTER TABLE deposits ADD COLUMN network_name TEXT;`,
+        function(err) {
+            if (err) {
+                console.log("Column 'network_name' already exists in 'deposits'.");
+            }
+        }
+    );
 });
+
+db.getAsync = promisify(db.get).bind(db);
+db.runAsync = promisify(db.run).bind(db);
 
 // Fetch all deposited order.
 // Fetch all withdrawn/canceled order.
@@ -80,18 +122,29 @@ async function getLastBlock() {
     }
 
 
-    let fromBlock = 0;
+    for (const connection of connections) {
+        web3 = connection.web3;
+        contractInstance = connection.contractInstance;
+        COINGECKO_CHAIN_ID = connection.coingeckoChainId;
+        networkName = connection.networkName;
 
-    db.get(`SELECT * FROM fetched_blocks WHERE ID = (SELECT MAX(ID) FROM fetched_blocks)`, (err, row) => {
-        if (row == undefined) {
-            data = [FROM_BLOCK - 1];
-            db.run(`INSERT INTO fetched_blocks (block_number) VALUES (?);`, data);
-            fromBlock = Number(FROM_BLOCK);
-        } else {
-            fromBlock = row["block_number"] + 1;
+        try {
+            const row = await db.getAsync(`SELECT * FROM fetched_blocks WHERE network_name = ? AND ID = (SELECT MAX(ID) FROM fetched_blocks WHERE network_name = ?)`, [networkName, networkName]);
+            let fromBlock = 0;
+            if (row === undefined) {
+                const data = [FROM_BLOCK - 1, networkName];
+                await db.runAsync(`INSERT INTO fetched_blocks (block_number, network_name) VALUES (?, ?);`, data);
+
+                fromBlock = Number(FROM_BLOCK);
+            } else {
+                fromBlock = row["block_number"] + 1;
+            }
+
+            await getNewBlocks(fromBlock);
+        } catch (err) {
+            console.error(err);
         }
-        getNewBlocks(fromBlock);
-    });
+    }
 }
 
 function delay(milliseconds) {
@@ -103,15 +156,14 @@ async function retryAxiosRequest(url, method, timeout, headers, maxRetries) {
 
     for(let i = 0; i < maxRetries; i++) {
         try {
-            const response = await axios({ url, method, timeout, headers });
-            return response;
+            return await axios({url, method, timeout, headers});
         } catch(err) {
             error = err;
             console.error(`Attempt ${i+1} failed. Retrying... in 30 seconds`);
             await delay(30 * 1000);
         }
     }
-    throw new Error('Maximum retries exceeded', error);
+    throw new Error(`Maximum retries exceeded ${error}`);
 }
 
 async function getNewBlocks(fromBlock) {
@@ -143,7 +195,7 @@ async function getNewBlocks(fromBlock) {
     prices = []; //clear cache
     for (let key in deposited_events) {
         let token1 = deposited_events[key].returnValues["token1"];
-        if (token1 == VETH) {
+        if (token1 === VETH) {
             token1 = WETH;
         }
 
@@ -173,15 +225,15 @@ async function getNewBlocks(fromBlock) {
 
     for (let key in deposited_events) {
         let token1 = deposited_events[key].returnValues["token1"];
-        if (token1 == VETH) {
+        if (token1 === VETH) {
             token1 = WETH;
         }
         deposited_events[key].returnValues["price"] = prices[token1.toLowerCase()];
     }
     db.serialize(() => {
-        if (deposited_events.length != 0) {
-            let placeholders = deposited_events.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").join(", ");
-            let sql = `INSERT INTO deposits (deposit_id, token0, token1, amount0, amount1, depositor, deposit_price, tracking_price, profit_taking, stop_loss) VALUES ` + placeholders + ";";
+        if (deposited_events.length !== 0) {
+            let placeholders = deposited_events.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").join(", ");
+            let sql = `INSERT INTO deposits (deposit_id, token0, token1, amount0, amount1, depositor, deposit_price, tracking_price, profit_taking, stop_loss, network_name) VALUES ` + placeholders + ";";
             let flat_array = [];
             for (let key in deposited_events) {
                 flat_array.push(deposited_events[key].returnValues["deposit_id"]);
@@ -194,10 +246,11 @@ async function getNewBlocks(fromBlock) {
                 flat_array.push(deposited_events[key].returnValues["price"]);
                 flat_array.push(deposited_events[key].returnValues["profit_taking"]);
                 flat_array.push(deposited_events[key].returnValues["stop_loss"]);
+                flat_array.push(networkName);
             }
             db.run(sql, flat_array);
         }
-        if (withdrawn_events.length != 0) {
+        if (withdrawn_events.length !== 0) {
             let sql = `UPDATE deposits SET withdraw_block = ?, withdrawer = ?, withdraw_type = ?, withdraw_amount = ? WHERE deposit_id = ?;`;
             for (let key in withdrawn_events) {
                 db.run(sql, [withdrawn_events[key].blockNumber, withdrawn_events[key].returnValues["withdrawer"], withdrawn_events[key].returnValues["withdraw_type"], withdrawn_events[key].returnValues["withdraw_amount"], withdrawn_events[key].returnValues["deposit_id"]]);
@@ -205,7 +258,7 @@ async function getNewBlocks(fromBlock) {
         }
 
         let sql = `INSERT INTO fetched_blocks (block_number) VALUES (?);`;
-        data = [block_number];
+        let data = [block_number];
         db.run(sql, data);
     });
 
@@ -217,7 +270,7 @@ async function getNewBlocks(fromBlock) {
     for (let key in deposits) {
         if (deposits[key].withdraw_block === null) {
             let token1 = deposits[key].token1;
-            if (token1 == VETH) {
+            if (token1 === VETH) {
                 token1 = WETH;
             }
             if (prices[token1.toLowerCase()] === undefined) {
@@ -245,8 +298,6 @@ async function getNewBlocks(fromBlock) {
             }
         });
     }
-
-    let calls = [];
 
     for (const deposit of deposits) {
         try {
@@ -285,7 +336,7 @@ async function getMinAmount(depositor, deposit_id) {
 
 function processDeposit(deposit) {
     let token1 = deposit.token1;
-    if (token1 == VETH) {
+    if (token1 === VETH) {
         token1 = WETH;
     }
 
