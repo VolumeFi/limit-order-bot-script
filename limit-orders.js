@@ -176,9 +176,7 @@ async function getNewBlocks(fromBlock) {
         if (token1 == VETH) {
             token1 = WETH;
         }
-        deposited_events[key].returnValues["tracking_price"] = prices[token1.toLowerCase()];
-
-        deposited_events[key].returnValues["price"] = deposited_events[key].returnValues["amount0"] / deposited_events[key].returnValues["amount1"];
+        deposited_events[key].returnValues["price"] = prices[token1.toLowerCase()];
     }
     db.serialize(() => {
         if (deposited_events.length != 0) {
@@ -193,7 +191,7 @@ async function getNewBlocks(fromBlock) {
                 flat_array.push(deposited_events[key].returnValues["amount1"]);
                 flat_array.push(deposited_events[key].returnValues["depositor"]);
                 flat_array.push(deposited_events[key].returnValues["price"]);
-                flat_array.push(deposited_events[key].returnValues["tracking_price"]);
+                flat_array.push(deposited_events[key].returnValues["price"]);
                 flat_array.push(deposited_events[key].returnValues["profit_taking"]);
                 flat_array.push(deposited_events[key].returnValues["stop_loss"]);
             }
