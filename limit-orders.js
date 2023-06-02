@@ -176,7 +176,9 @@ async function getNewBlocks(fromBlock) {
         if (token1 == VETH) {
             token1 = WETH;
         }
-        deposited_events[key].returnValues["price"] = prices[token1.toLowerCase()];
+        deposited_events[key].returnValues["tracking_price"] = prices[token1.toLowerCase()];
+
+        deposited_events[key].returnValues["price"] = deposited_events[key].returnValues["amount0"] / deposited_events[key].returnValues["amount1"];
     }
     db.serialize(() => {
         if (deposited_events.length != 0) {
@@ -191,7 +193,7 @@ async function getNewBlocks(fromBlock) {
                 flat_array.push(deposited_events[key].returnValues["amount1"]);
                 flat_array.push(deposited_events[key].returnValues["depositor"]);
                 flat_array.push(deposited_events[key].returnValues["price"]);
-                flat_array.push(deposited_events[key].returnValues["price"]);
+                flat_array.push(deposited_events[key].returnValues["tracking_price"]);
                 flat_array.push(deposited_events[key].returnValues["profit_taking"]);
                 flat_array.push(deposited_events[key].returnValues["stop_loss"]);
             }
@@ -249,20 +251,23 @@ async function getNewBlocks(fromBlock) {
     let calls = [];
 
     for (const deposit of deposits) {
-        let withdrawDeposit = null;
+        try {
+            let withdrawDeposit = null;
 
-        if(deposit.withdraw_block === null) {
-            withdrawDeposit = processDeposit(deposit);
-        }
+            if (deposit.withdraw_block === null) {
+                withdrawDeposit = processDeposit(deposit);
+            }
 
-        if(withdrawDeposit) {
-            withdrawDeposits.push(withdrawDeposit);
+            if (withdrawDeposit) {
+                withdrawDeposit["min_amount0"] = await getMinAmount(deposit.depositor, withdrawDeposit.deposit_id);
+                withdrawDeposits.push(withdrawDeposit);
+            }
 
-            withdrawDeposit["min_amount0"] = await getMinAmount(withdrawDeposit.depositor, withdrawDeposit.deposit_id);
-
-        }
-        if (withdrawDeposits.length >= MAX_SIZE) {
-            break;
+            if (withdrawDeposits.length >= MAX_SIZE) {
+                break;
+            }
+        } catch (e) {
+            console.log(e);
         }
     }
 
