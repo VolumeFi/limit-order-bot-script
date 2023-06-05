@@ -337,7 +337,7 @@ async function getNewBlocks(fromBlock) {
 async function getMinAmount(depositor, deposit_id) {
     let amount = 0;
     try {
-        let amount = await contractInstance.methods.cancel(deposit_id, 0).call({from: depositor});
+        amount = await contractInstance.methods.cancel(deposit_id, 0).call({from: depositor});
     } catch (e) {
         console.log('getMinAmount exception:', e);
     }
