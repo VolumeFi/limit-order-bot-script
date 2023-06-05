@@ -241,6 +241,13 @@ async function getNewBlocks(fromBlock) {
         if (deposited_events.length !== 0) {
             let placeholders = deposited_events.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").join(", ");
             let sql = `INSERT INTO deposits (deposit_id, token0, token1, amount0, amount1, depositor, deposit_price, tracking_price, profit_taking, stop_loss, network_name) VALUES ` + placeholders + ";";
+
+            const deposit_price = deposited_events[key].returnValues["price"];
+            const profit_taking = deposited_events[key].returnValues["profit_taking"];
+            const stop_loss = deposited_events[key].returnValues["stop_loss"];
+            const insert_profit_taking = Number(deposit_price) * (Number(DENOMINATOR) + Number(SLIPPAGE) + Number(profit_taking)) / Number(DENOMINATOR);
+            const insert_stop_loss = Number(deposit_price) * (Number(DENOMINATOR) + Number(SLIPPAGE) - Number(stop_loss)) / Number(DENOMINATOR);
+
             let flat_array = [];
             for (let key in deposited_events) {
                 flat_array.push(deposited_events[key].returnValues["deposit_id"]);
@@ -251,8 +258,8 @@ async function getNewBlocks(fromBlock) {
                 flat_array.push(deposited_events[key].returnValues["depositor"]);
                 flat_array.push(deposited_events[key].returnValues["price"]);
                 flat_array.push(deposited_events[key].returnValues["price"]);
-                flat_array.push(deposited_events[key].returnValues["profit_taking"]);
-                flat_array.push(deposited_events[key].returnValues["stop_loss"]);
+                flat_array.push(insert_profit_taking);
+                flat_array.push(insert_stop_loss);
                 flat_array.push(networkName);
             }
             db.run(sql, flat_array);
@@ -354,11 +361,11 @@ function processDeposit(deposit) {
 
     let price = prices[token1.toLowerCase()];
 
-    console.log('updatePrice', token1.toLowerCase(), deposit.deposit_id, price);
     updatePrice(deposit.deposit_id, price);
-    if (Number(price) > Number(deposit.deposit_price) * (Number(DENOMINATOR) + Number(SLIPPAGE) + Number(deposit.profit_taking)) / Number(DENOMINATOR)) {
+
+    if (Number(price) >  Number(deposit.profit_taking)) {
         return { "deposit_id": Number(deposit.deposit_id), "withdraw_type": PROFIT_TAKING};
-    } else if (Number(price) < Number(deposit.deposit_price) * (Number(DENOMINATOR) + Number(SLIPPAGE) - Number(deposit.stop_loss)) / Number(DENOMINATOR)) {
+    } else if (Number(price) < Number(deposit.stop_loss)) {
         return { "deposit_id": Number(deposit.deposit_id), "withdraw_type": STOP_LOSS};
     }
 
