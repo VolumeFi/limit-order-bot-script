@@ -1,5 +1,5 @@
 const Web3 = require("web3");
-const {promisify} = require("util");
+const { promisify } = require("util");
 const axios = require('axios');
 const sqlite3 = require("sqlite3").verbose();
 const LCDClient = require('@palomachain/paloma.js').LCDClient;
@@ -48,14 +48,15 @@ async function setupConnections() {
     });
 }
 
-setupConnections().then(r => {});
+setupConnections().then(r => { });
 
 let db = new sqlite3.Database("./events.db");
 db.serialize(() => {
     db.run(
         `CREATE TABLE IF NOT EXISTS fetched_blocks (
             ID INTEGER PRIMARY KEY AUTOINCREMENT,
-            block_number INTEGER
+            block_number INTEGER,
+            network_name TEXT
         );`
     );
     db.run(
@@ -73,7 +74,8 @@ db.serialize(() => {
             withdraw_type INTEGER,
             withdraw_block INTEGER,
             withdraw_amount TEXT,
-            withdrawer TEXT
+            withdrawer TEXT,
+            network_name TEXT
         );`);
     db.run(`CREATE INDEX IF NOT EXISTS deposit_idx ON deposits (deposit_id);`);
 
@@ -82,23 +84,6 @@ db.serialize(() => {
     address TEXT NOT NULL
     )`);
 
-    db.run(
-        `ALTER TABLE fetched_blocks ADD COLUMN network_name TEXT;`,
-        function(err) {
-            if (err) {
-                console.log("Column 'network_name' already exists in 'fetched_blocks'.");
-            }
-        }
-    );
-
-    db.run(
-        `ALTER TABLE deposits ADD COLUMN network_name TEXT;`,
-        function(err) {
-            if (err) {
-                console.log("Column 'network_name' already exists in 'deposits'.");
-            }
-        }
-    );
 });
 
 db.getAsync = promisify(db.get).bind(db);
@@ -128,6 +113,7 @@ async function getLastBlock() {
         WETH = connection.weth;
         FROM_BLOCK = connection.fromBlock;
         LOB_CW = connection.cw;
+        prices[networkName] = [];
 
         try {
             const row = await db.getAsync(`SELECT * FROM fetched_blocks WHERE network_name = ? AND ID = (SELECT MAX(ID) FROM fetched_blocks WHERE network_name = ?)`, [networkName, networkName]);
@@ -145,6 +131,7 @@ async function getLastBlock() {
         } catch (err) {
             console.error(err);
         }
+        await delay(6 * 1000);
     }
 
     processing = false;
@@ -157,12 +144,12 @@ function delay(milliseconds) {
 async function retryAxiosRequest(url, method, timeout, headers, maxRetries) {
     let error = null;
 
-    for(let i = 0; i < maxRetries; i++) {
+    for (let i = 0; i < maxRetries; i++) {
         try {
-            return await axios({url, method, timeout, headers});
-        } catch(err) {
+            return await axios({ url, method, timeout, headers });
+        } catch (err) {
             error = err;
-            console.error(`Attempt ${i+1} failed. Retrying... in 30 seconds`);
+            console.error(`Attempt ${i + 1} failed. Retrying... in 30 seconds`);
             await delay(30 * 1000);
         }
     }
@@ -194,20 +181,18 @@ async function getNewBlocks(fromBlock) {
 
     let responses = [];
 
-
-    prices = []; //clear cache
-    for (let key in deposited_events) {
-        let token1 = deposited_events[key].returnValues["token1"];
+    for (const deposited_event of deposited_events) {
+        let token1 = deposited_event.returnValues["token1"];
         if (token1 === VETH) {
             token1 = WETH;
         }
 
 
         responses.push(await retryAxiosRequest(
-             `https://pro-api.coingecko.com/api/v3/simple/token_price/${COINGECKO_CHAIN_ID}?contract_addresses=${token1}&vs_currencies=usd&x_cg_pro_api_key=${process.env.COINGECKO_API_KEY}`,
-             'get',
+            `https://pro-api.coingecko.com/api/v3/simple/token_price/${COINGECKO_CHAIN_ID}?contract_addresses=${token1}&vs_currencies=usd&x_cg_pro_api_key=${process.env.COINGECKO_API_KEY}`,
+            'get',
             8000,
-             {
+            {
                 'Content-Type': 'application/json',
             },
             2
@@ -220,8 +205,8 @@ async function getNewBlocks(fromBlock) {
             let price_index = value;
             let value_object = response.data[value];
 
-            if(value_object.usd !== undefined) {
-                prices[price_index] = value_object.usd
+            if (value_object.usd !== undefined) {
+                prices[networkName][price_index] = value_object.usd
             }
         });
     }
@@ -231,62 +216,61 @@ async function getNewBlocks(fromBlock) {
         if (token1 === VETH) {
             token1 = WETH;
         }
-        deposited_events[key].returnValues["price"] = prices[token1.toLowerCase()];
+        deposited_events[key].returnValues["price"] = prices[networkName][token1.toLowerCase()];
     }
-    db.serialize(() => {
-        if (deposited_events.length !== 0) {
-            let placeholders = deposited_events.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").join(", ");
-            let sql = `INSERT INTO deposits (deposit_id, token0, token1, amount0, amount1, depositor, deposit_price, tracking_price, profit_taking, stop_loss, network_name) VALUES ` + placeholders + ";";
+    if (deposited_events.length !== 0) {
+        let placeholders = deposited_events.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").join(", ");
+        let sql = `INSERT INTO deposits (deposit_id, token0, token1, amount0, amount1, depositor, deposit_price, tracking_price, profit_taking, stop_loss, network_name) VALUES ` + placeholders + ";";
 
-            let flat_array = [];
-            for (let key in deposited_events) {
-                const profit_taking = deposited_events[key].returnValues["profit_taking"];
-                const stop_loss = deposited_events[key].returnValues["stop_loss"];
-                const insert_profit_taking = Number(profit_taking) + Number(SLIPPAGE);
-                const insert_stop_loss = Number(stop_loss) - Number(SLIPPAGE);
-                flat_array.push(deposited_events[key].returnValues["deposit_id"]);
-                flat_array.push(deposited_events[key].returnValues["token0"]);
-                flat_array.push(deposited_events[key].returnValues["token1"]);
-                flat_array.push(deposited_events[key].returnValues["amount0"]);
-                flat_array.push(deposited_events[key].returnValues["amount1"]);
-                flat_array.push(deposited_events[key].returnValues["depositor"]);
-                flat_array.push(deposited_events[key].returnValues["price"]);
-                flat_array.push(deposited_events[key].returnValues["price"]);
-                flat_array.push(insert_profit_taking);
-                flat_array.push(insert_stop_loss);
-                flat_array.push(networkName);
-            }
-            db.run(sql, flat_array);
+        let flat_array = [];
+        for (const deposited_event of deposited_events) {
+            const profit_taking = deposited_event.returnValues["profit_taking"];
+            const stop_loss = deposited_event.returnValues["stop_loss"];
+            const insert_profit_taking = Number(profit_taking) + Number(SLIPPAGE);
+            const insert_stop_loss = Number(stop_loss) - Number(SLIPPAGE);
+            flat_array.push(deposited_event.returnValues["deposit_id"]);
+            flat_array.push(deposited_event.returnValues["token0"]);
+            flat_array.push(deposited_event.returnValues["token1"]);
+            flat_array.push(deposited_event.returnValues["amount0"]);
+            flat_array.push(deposited_event.returnValues["amount1"]);
+            flat_array.push(deposited_event.returnValues["depositor"]);
+            flat_array.push(deposited_event.returnValues["price"]);
+            flat_array.push(deposited_event.returnValues["price"]);
+            flat_array.push(insert_profit_taking);
+            flat_array.push(insert_stop_loss);
+            flat_array.push(networkName);
         }
-        if (withdrawn_events.length !== 0) {
-            let sql = `UPDATE deposits SET withdraw_block = ?, withdrawer = ?, withdraw_type = ?, withdraw_amount = ? WHERE deposit_id = ?;`;
-            for (let key in withdrawn_events) {
-                db.run(sql, [withdrawn_events[key].blockNumber, withdrawn_events[key].returnValues["withdrawer"], withdrawn_events[key].returnValues["withdraw_type"], withdrawn_events[key].returnValues["withdraw_amount"], withdrawn_events[key].returnValues["deposit_id"]]);
-            }
+        await db.runAsync(sql, flat_array);
+    }
+    if (withdrawn_events.length !== 0) {
+        let sql = `UPDATE deposits SET withdraw_block = ?, withdrawer = ?, withdraw_type = ?, withdraw_amount = ? WHERE deposit_id = ? AND network_name = ?;`;
+        for (const withdrawn_event of withdrawn_events) {
+            await db.runAsync(sql, [withdrawn_event.blockNumber, withdrawn_event.returnValues["withdrawer"], withdrawn_event.returnValues["withdraw_type"], withdrawn_event.returnValues["withdraw_amount"], withdrawn_event.returnValues["deposit_id"], networkName]);
         }
-
+    }
+    if (fromBlock < block_number) {
         let sql = `INSERT INTO fetched_blocks (block_number, network_name) VALUES (?, ?);`;
         let data = [block_number, networkName];
-        db.run(sql, data);
-    });
+        await db.runAsync(sql, data);
+    }
 
-    const deposits = await getAllDeposits();
+    const deposits = await getPendingDeposits();
     const withdrawDeposits = [];
 
     responses = [];
 
-    for (let key in deposits) {
-        if (deposits[key].withdraw_block === null) {
-            let token1 = deposits[key].token1;
+    for (const deposit of deposits) {
+        if (deposit.network_name == networkName) {
+            let token1 = deposit.token1;
             if (token1 === VETH) {
                 token1 = WETH;
             }
-            if (prices[token1.toLowerCase()] === undefined) {
+            if (prices[networkName][token1.toLowerCase()] === undefined) {
                 responses.push(await retryAxiosRequest(
                     `https://pro-api.coingecko.com/api/v3/simple/token_price/${COINGECKO_CHAIN_ID}?contract_addresses=${token1}&vs_currencies=usd&x_cg_pro_api_key=${process.env.COINGECKO_API_KEY}`,
                     'get',
                     8000,
-                     {
+                    {
                         'Content-Type': 'application/json',
                     },
                     2
@@ -295,14 +279,13 @@ async function getNewBlocks(fromBlock) {
         }
     }
 
-
     for (const response of responses) {
         Object.keys(response.data).forEach(value => {
             let price_index = value;
             let value_object = response.data[value];
 
-            if(value_object.usd !== undefined) {
-                prices[price_index] = value_object.usd
+            if (value_object.usd !== undefined) {
+                prices[networkName][price_index] = value_object.usd
             }
         });
     }
@@ -310,9 +293,8 @@ async function getNewBlocks(fromBlock) {
     for (const deposit of deposits) {
         try {
             let withdrawDeposit = null;
-
-            if (deposit.withdraw_block === null) {
-                withdrawDeposit = processDeposit(deposit);
+            if (deposit.network_name == networkName) {
+                withdrawDeposit = await processDeposit(deposit);
             }
 
             if (withdrawDeposit) {
@@ -336,7 +318,7 @@ async function getNewBlocks(fromBlock) {
 async function getMinAmount(depositor, deposit_id) {
     let amount = 0;
     try {
-        amount = await contractInstance.methods.cancel(deposit_id, 0).call({from: depositor});
+        amount = await contractInstance.methods.cancel(deposit_id, 0).call({ from: depositor });
     } catch (e) {
         console.log('getMinAmount exception:', e);
     }
@@ -345,20 +327,20 @@ async function getMinAmount(depositor, deposit_id) {
 }
 
 
-function processDeposit(deposit) {
+async function processDeposit(deposit) {
     let token1 = deposit.token1;
     if (token1 === VETH) {
         token1 = WETH;
     }
 
-    let price = prices[token1.toLowerCase()];
+    let price = prices[networkName][token1.toLowerCase()];
 
-    updatePrice(deposit.deposit_id, price);
+    await updatePrice(deposit.deposit_id, price);
 
-    if (Number(price) >  Number(deposit.profit_taking)) {
-        return { "deposit_id": Number(deposit.deposit_id), "withdraw_type": PROFIT_TAKING};
+    if (Number(price) > Number(deposit.profit_taking)) {
+        return { "deposit_id": Number(deposit.deposit_id), "withdraw_type": PROFIT_TAKING };
     } else if (Number(price) < Number(deposit.stop_loss)) {
-        return { "deposit_id": Number(deposit.deposit_id), "withdraw_type": STOP_LOSS};
+        return { "deposit_id": Number(deposit.deposit_id), "withdraw_type": STOP_LOSS };
     }
 
     return null;
@@ -378,13 +360,13 @@ async function executeWithdraw(deposits) {
     const msg = new MsgExecuteContract(
         wallet.key.accAddress,
         LOB_CW,
-        {"put_withdraw": {"deposits": deposits}}
+        { "put_withdraw": { "deposits": deposits } }
     );
 
     let result = null;
 
     try {
-        const tx = await wallet.createAndSignTx({msgs: [msg]});
+        const tx = await wallet.createAndSignTx({ msgs: [msg] });
         result = await lcd.tx.broadcast(tx);
 
         try {
@@ -402,7 +384,7 @@ async function executeWithdraw(deposits) {
 }
 
 async function getChatIdByAddress(address) {
-    await db.get(`SELECT chat_id FROM users WHERE address = ?`, [address], (err, row) => {
+    await db.get(`SELECT chat_id FROM users WHERE address = ?;`, [address], (err, row) => {
         if (err) {
             console.error(err.message);
             return null;
@@ -415,15 +397,15 @@ async function getChatIdByAddress(address) {
     });
 }
 
-async function getAllDeposits(depositor = null) {
+async function getPendingDeposits(depositor = null) {
     let dbAll = promisify(db.all).bind(db);
 
     try {
         let rows;
         if (depositor) {
-            rows = await dbAll(`SELECT * FROM deposits WHERE depositor = ?`, depositor);
+            rows = await dbAll(`SELECT * FROM deposits WHERE depositor = ? AND withdraw_block IS NULL;`, depositor);
         } else {
-            rows = await dbAll(`SELECT * FROM deposits`);
+            rows = await dbAll(`SELECT * FROM deposits WHERE withdraw_block IS NULL;`);
         }
         return rows;
     } catch (err) {
@@ -431,10 +413,10 @@ async function getAllDeposits(depositor = null) {
     }
 }
 
-function updatePrice(depositId, price) {
-    db.run(
-        `UPDATE deposits SET tracking_price = ? WHERE deposit_id = ?`,
-        [price, depositId], null
+async function updatePrice(depositId, price) {
+    await db.runAsync(
+        `UPDATE deposits SET tracking_price = ? WHERE deposit_id = ? AND network_name = ?;`,
+        [price, depositId, networkName], null
     );
 }
 
@@ -446,11 +428,11 @@ let bot = null;
 
 if (process.env.TELEGRAM_ID) {
     const token = process.env.TELEGRAM_ID;
-    bot = new TelegramBot(token, {polling: true});
+    bot = new TelegramBot(token, { polling: true });
 
     bot.on('message', (msg) => {
         const chatId = msg.chat.id;
-        db.get(`SELECT address FROM users WHERE chat_id = ?`, [chatId], (err, row) => {
+        db.get(`SELECT address FROM users WHERE chat_id = ?;`, [chatId], (err, row) => {
             if (err) {
                 console.error(err.message);
                 return;
@@ -466,7 +448,7 @@ if (process.env.TELEGRAM_ID) {
     bot.onText(/^(0x[a-fA-F0-9]{40})$/, (msg, match) => {
         const chatId = msg.chat.id;
         const address = match[1];
-        db.run(`INSERT OR REPLACE INTO users(chat_id, address) VALUES(?, ?)`, [chatId, address], function (err) {
+        db.run(`INSERT OR REPLACE INTO users(chat_id, address) VALUES(?, ?);`, [chatId, address], function (err) {
             if (err) {
                 console.error(err.message);
                 return;
@@ -479,7 +461,7 @@ if (process.env.TELEGRAM_ID) {
 }
 
 function swapComplete(chatId) {
-    if(chatId !== undefined) {
+    if (chatId !== undefined) {
         if (bot !== null) {
             bot.sendMessage(chatId, 'Your swap is complete!');
         }
@@ -488,5 +470,5 @@ function swapComplete(chatId) {
 
 module.exports = {
     processDeposits,
-    getAllDeposits
+    getPendingDeposits
 };
