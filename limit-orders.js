@@ -151,6 +151,7 @@ async function getLastBlock() {
         } catch (err) {
             console.error(err);
         }
+        await delay(6 * 1000);
     }
 }
 
@@ -242,14 +243,12 @@ async function getNewBlocks(fromBlock) {
             let placeholders = deposited_events.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").join(", ");
             let sql = `INSERT INTO deposits (deposit_id, token0, token1, amount0, amount1, depositor, deposit_price, tracking_price, profit_taking, stop_loss, network_name) VALUES ` + placeholders + ";";
 
-            const deposit_price = deposited_events[key].returnValues["price"];
-            const profit_taking = deposited_events[key].returnValues["profit_taking"];
-            const stop_loss = deposited_events[key].returnValues["stop_loss"];
-            const insert_profit_taking = Number(deposit_price) * (Number(DENOMINATOR) + Number(SLIPPAGE) + Number(profit_taking)) / Number(DENOMINATOR);
-            const insert_stop_loss = Number(deposit_price) * (Number(DENOMINATOR) + Number(SLIPPAGE) - Number(stop_loss)) / Number(DENOMINATOR);
-
             let flat_array = [];
             for (let key in deposited_events) {
+                const profit_taking = deposited_events[key].returnValues["profit_taking"];
+                const stop_loss = deposited_events[key].returnValues["stop_loss"];
+                const insert_profit_taking = Number(profit_taking) + Number(SLIPPAGE);
+                const insert_stop_loss = Number(stop_loss) - Number(SLIPPAGE);
                 flat_array.push(deposited_events[key].returnValues["deposit_id"]);
                 flat_array.push(deposited_events[key].returnValues["token0"]);
                 flat_array.push(deposited_events[key].returnValues["token1"]);
