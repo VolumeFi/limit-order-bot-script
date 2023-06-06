@@ -43,7 +43,7 @@ async def limit_order_bot_init():
 
     # Instantiate
     initialize_msg = {
-        "retry_delay": 60,
+        "retry_delay": 30,
         "job_id": job_id
     }
     code_id = os.environ['LOB_CW_CODE_ID']
