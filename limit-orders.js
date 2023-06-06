@@ -408,40 +408,39 @@ async function processDeposit(deposit) {
 }
 
 async function executeWithdraw(deposits) {
-    // console.log("executeWithdraw", deposits);
-    // const lcd = new LCDClient({
-    //     URL: PALOMA_LCD,
-    //     chainID: PALOMA_CHAIN_ID,
-    //     classic: true,
-    // });
-    // const mk = new MnemonicKey({
-    //     mnemonic: PALOMA_PRIVATE_KEY,
-    // });
-    // const wallet = lcd.wallet(mk);
-    // const msg = new MsgExecuteContract(
-    //     wallet.key.accAddress,
-    //     LOB_CW,
-    //     { "put_withdraw": { "deposits": deposits } }
-    // );
-    //
-    // let result = null;
-    //
-    // try {
-    //     const tx = await wallet.createAndSignTx({ msgs: [msg] });
-    //     result = await lcd.tx.broadcast(tx);
-    //
-    //     try {
-    //         deposits.forEach(deposit => {
-    //             swapComplete(getChatIdByAddress(deposit.deposit_id));
-    //         });
-    //     } catch (e) {
-    //         console.log(e);
-    //     }
-    // } catch (e) {
-    //     console.log(e);
-    // }
-    //
-    // return result;
+    const lcd = new LCDClient({
+        URL: PALOMA_LCD,
+        chainID: PALOMA_CHAIN_ID,
+        classic: true,
+    });
+    const mk = new MnemonicKey({
+        mnemonic: PALOMA_PRIVATE_KEY,
+    });
+    const wallet = lcd.wallet(mk);
+    const msg = new MsgExecuteContract(
+        wallet.key.accAddress,
+        LOB_CW,
+        { "put_withdraw": { "deposits": deposits } }
+    );
+
+    let result = null;
+
+    try {
+        const tx = await wallet.createAndSignTx({ msgs: [msg] });
+        result = await lcd.tx.broadcast(tx);
+
+        try {
+            deposits.forEach(deposit => {
+                swapComplete(getChatIdByAddress(deposit.deposit_id));
+            });
+        } catch (e) {
+            console.log(e);
+        }
+    } catch (e) {
+        console.log(e);
+    }
+
+    return result;
 }
 
 async function getChatIdByAddress(address) {
