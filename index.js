@@ -1,6 +1,10 @@
 const Sentry = require('@sentry/node');
 const express = require('express');
+<<<<<<< Updated upstream
 const { getPendingDeposits, processDeposits} = require('./limit-orders');
+=======
+const { getAllDeposits, processDeposits, getCoinInfo} = require('./limit-orders');
+>>>>>>> Stashed changes
 
 require('dotenv').config();
 
@@ -15,7 +19,7 @@ app.get('/', (req, res) => {
     res.send('Service is running!');
 });
 
-function convert(deposit) {
+async function convert(deposit) {
     let result = {};
 
     for (let key in deposit) {
@@ -24,6 +28,9 @@ function convert(deposit) {
         }
     }
 
+    let coin_info = await getCoinInfo(deposit.token1);
+
+    result[coin_info] = coin_info;
     return result;
 }
 
@@ -34,7 +41,13 @@ app.get('/robots', async (req, res) => {
         let result = [];
 
         for (const deposit of deposits) {
+<<<<<<< Updated upstream
             result.push(convert(deposit));
+=======
+            if(deposit.withdraw_block === null) {
+                result.push(await convert(deposit));
+            }
+>>>>>>> Stashed changes
         }
 
         res.json(result);
