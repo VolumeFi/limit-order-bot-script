@@ -7,6 +7,8 @@ const MsgExecuteContract = require('@palomachain/paloma.js').MsgExecuteContract;
 const MnemonicKey = require('@palomachain/paloma.js').MnemonicKey;
 const TelegramBot = require('node-telegram-bot-api');
 const fs = require('fs').promises;
+const { Pool } = require('pg');
+const geckoTokens = require("./gecko.json");
 
 require("dotenv").config();
 
@@ -88,6 +90,65 @@ db.serialize(() => {
 
 db.getAsync = promisify(db.get).bind(db);
 db.runAsync = promisify(db.run).bind(db);
+
+const pool = new Pool({
+    user: process.env.PG_USER,
+    host: process.env.PG_HOST,
+    database: process.env.PG_DATABASE,
+    password: process.env.PG_PASSWORD,
+    port: process.env.PG_PORT,
+});
+
+async function fetchCoinData(coinID) {
+    const queryText = 'SELECT data FROM coinData WHERE coin_id = $1';
+    const res = await pool.query(queryText, [coinID]);
+
+    if (res.rows.length > 0) {
+        return res.rows[0].data;
+    } else {
+        const response = await axios({
+            url: `https://pro-api.coingecko.com/api/v3/coins/${coinID}?x_cg_pro_api_key=${process.env.COINGECKO_API_KEY}`,
+            method: 'get',
+            timeout: 8000,
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        });
+
+        if (response.data) {
+            const insertText = 'INSERT INTO coinData(coin_id, data) VALUES($1, $2)';
+            await pool.query(insertText, [coinID, response.data]);
+
+            return response.data;
+        }
+    }
+}
+
+async function getCoinInfo(id) {
+    let coinInfo = null;
+
+    for (const geckoToken of geckoTokens) {
+        Object.keys(geckoToken.platforms).forEach(prop => {
+            try {
+                if (geckoToken.platforms[prop].toLowerCase() == id.toLowerCase()) {
+                    coinInfo = geckoToken;
+                    //break;
+                }
+            } catch (e) {
+
+            }
+        });
+        if(coinInfo) { break; }
+    }
+
+
+    if (coinInfo) {
+        let coinData = await fetchCoinData(coinInfo.id);
+        coinInfo['image'] = coinData.image;
+    }
+
+    return coinInfo;
+}
 
 // Fetch all deposited order.
 // Fetch all withdrawn/canceled order.
@@ -347,7 +408,6 @@ async function processDeposit(deposit) {
 }
 
 async function executeWithdraw(deposits) {
-    console.log("executeWithdraw", deposits);
     const lcd = new LCDClient({
         URL: PALOMA_LCD,
         chainID: PALOMA_CHAIN_ID,
@@ -470,5 +530,6 @@ function swapComplete(chatId) {
 
 module.exports = {
     processDeposits,
-    getPendingDeposits
+    getPendingDeposits,
+    getCoinInfo
 };
