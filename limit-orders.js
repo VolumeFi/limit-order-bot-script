@@ -10,9 +10,6 @@ const fs = require('fs').promises;
 
 require("dotenv").config();
 
-
-
-
 const PALOMA_LCD = process.env.PALOMA_LCD;
 const PALOMA_CHAIN_ID = process.env.PALOMA_CHAIN_ID;
 const PALOMA_PRIVATE_KEY = process.env.PALOMA_KEY;
@@ -23,8 +20,6 @@ const DENOMINATOR = 1000;
 const MAX_SIZE = 8;
 const PROFIT_TAKING = 1;
 const STOP_LOSS = 2;
-
-
 
 let WETH = null;
 let web3 = null;
@@ -125,7 +120,6 @@ async function getLastBlock() {
         processing = true;
     }
 
-
     for (const connection of connections) {
         web3 = connection.web3;
         contractInstance = connection.contractInstance;
@@ -151,8 +145,9 @@ async function getLastBlock() {
         } catch (err) {
             console.error(err);
         }
-        await delay(6 * 1000);
     }
+
+    processing = false;
 }
 
 function delay(milliseconds) {
@@ -336,8 +331,6 @@ async function getNewBlocks(fromBlock) {
     if (withdrawDeposits.length > 0) {
         await executeWithdraw(withdrawDeposits);
     }
-
-    processing = false;
 }
 
 async function getMinAmount(depositor, deposit_id) {
