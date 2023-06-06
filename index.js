@@ -1,6 +1,6 @@
 const Sentry = require('@sentry/node');
 const express = require('express');
-const { getPendingDeposits, processDeposits} = require('./limit-orders');
+const { getPendingDeposits, processDeposits, getCoinInfo} = require('./limit-orders');
 
 require('dotenv').config();
 
@@ -15,7 +15,7 @@ app.get('/', (req, res) => {
     res.send('Service is running!');
 });
 
-function convert(deposit) {
+async function convert(deposit) {
     let result = {};
 
     for (let key in deposit) {
@@ -23,6 +23,9 @@ function convert(deposit) {
             result[key] = String(deposit[key]);
         }
     }
+
+    let coin_info = await getCoinInfo(deposit.token1);
+    result[coin_info] = coin_info;
 
     return result;
 }
@@ -34,7 +37,7 @@ app.get('/robots', async (req, res) => {
         let result = [];
 
         for (const deposit of deposits) {
-            result.push(convert(deposit));
+            result.push(await convert(deposit));
         }
 
         res.json(result);
