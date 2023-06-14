@@ -13,11 +13,11 @@ from paloma_sdk.key.mnemonic import MnemonicKey
 from paloma_sdk.client.lcd.api.tx import CreateTxOptions
 
 
-async def limit_order_bot_init():
-    node: str = os.environ['BNB_NODE']
+async def limit_order_bot_init(config: dict):
+    node: str = config['NODE']
     w3: Web3 = Web3(Web3.HTTPProvider(node))
-    pancakeswap_lob_vyper = os.environ['PANCAKESWAP_LOB_VYPER']
-    pancakeswap_lob_abi = json.loads(os.environ['LOB_ABI'])
+    pancakeswap_lob_vyper = config['VYPER']
+    pancakeswap_lob_abi = json.loads(config['ABI'])
     lob_sc: Contract = w3.eth.contract(
         address=pancakeswap_lob_vyper, abi=pancakeswap_lob_abi)
     payload = lob_sc.encodeABI("multiple_withdraw", [[], [], []])[2:]
@@ -32,9 +32,9 @@ async def limit_order_bot_init():
     wallet = paloma.wallet(acct)
 
     # Job create
-    job_id = os.environ['PANCAKESWAP_LOB_JOB_ID']
-    chain_type = os.environ['PANCAKESWAP_CHAIN_TYPE']
-    chain_reference_id = os.environ['PANCAKESWAP_CHAIN_REFERENCE_ID']
+    job_id = config['JOB_ID']
+    chain_type = config['CHAIN_TYPE']
+    chain_reference_id = config['CHAIN_REFERENCE_ID']
     result = await paloma.job_scheduler.create_job(
         wallet, job_id, pancakeswap_lob_vyper, pancakeswap_lob_abi, payload,
         chain_type, chain_reference_id)
@@ -63,12 +63,16 @@ async def limit_order_bot_init():
         )
     )
     result = await paloma.tx.broadcast_sync(tx)
+    time.sleep(6)
     print(result)
 
 
 async def main():
     load_dotenv()
-    await limit_order_bot_init()
+    f = open('networks.json')
+    data = json.load(f)
+    for config in data:
+        await limit_order_bot_init(config)
 
 
 if __name__ == "__main__":
