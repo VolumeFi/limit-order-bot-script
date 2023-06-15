@@ -12,18 +12,30 @@ This is a Node.js application that interacts with Binance Smart Chain (BSC) and 
 
 You will need to set the following environment variables:
 
-- `BNB_NODE`: The URL of the BSC node
-- `PANCAKESWAP_LOB_VYPER`: The address of the PancakeSwap Limit Order Bot contract
-- `LOB_ABI`: The ABI for the Limit Order Bot contract
-- `UNISWAP_V2_POOL_ABI`: The ABI for the Uniswap V2 Pool contract
-- `UNISWAP_V3_LOB_VYPER_START`: The starting block of the Uniswap V3 Limit Order Bot contract
+- `PALOMA_KEY`: The private key of the Paloma wallet
 - `PALOMA_LCD`: The URL of the Paloma LCD
 - `PALOMA_CHAIN_ID`: The ID of the Paloma chain
-- `PALOMA_PRIVATE_KEY`: The private key of the Paloma wallet
-- `LOB_CW`: The address of the Limit Order Bot Contract Wrapper
-- `WETH`: The address of the Wrapped Ethereum (WETH) contract
+- `LOB_CW_CODE_ID`: The code id of the Limit Order Bot CosmWasm
 - `SLIPPAGE`: The slippage rate
+- `SENTRY`
 - `TELEGRAM_ID`: The ID of the Telegram bot
+- `PORT`
+- `COINGECKO_API_KEY`
+
+And you will need to set configuration in `networks.json`:
+
+- `NODE`: The URL of the EVM chain node
+- `ABI`: The ABI for the Limit Order Bot contract
+- `VYPER`: The address of the Limit Order Bot contract
+- `JOB_ID`: The job id of the Paloma job
+- `CHAIN_TYPE`: Chain type. "evm" for EVM chains
+- `CHAIN_REFERENCE_ID`: Chain reference id in Paloma
+- `COINGECKO_CHAIN_ID`: Chain identifier in Coingecko API
+- `NETWORK_NAME`: Network name on which the limit order bot
+- `WETH`: Wrapped basecoin ERC20 token address
+- `FROM_BLOCK`: The starting block of the Limit Order Bot contract
+- `CW`: The address of the Limit Order Bot CosmWasm
+
 
 ## Usage
 
@@ -49,18 +61,7 @@ This Python application uses the Paloma SDK to interact with the Binance Smart C
 
 ## Prerequisites
 
-You need Python 3.8 or above installed on your machine. Also, you need to have the following environment variables set:
-
-- `BNB_NODE`: The URL of your Binance Smart Chain node.
-- `PANCAKESWAP_LOB_VYPER`: The address of the PancakeSwap Limit Order Bot contract.
-- `PANCAKESWAP_LOB_ABI`: The ABI of the PancakeSwap Limit Order Bot contract.
-- `PALOMA_LCD`: The URL of your Paloma LCD.
-- `PALOMA_CHAIN_ID`: The ID of your Paloma Chain.
-- `PALOMA_KEY`: The mnemonic phrase of your Paloma wallet.
-- `PANCAKESWAP_LOB_JOB_ID`: The ID of the PancakeSwap Limit Order Bot job.
-- `PANCAKESWAP_CHAIN_TYPE`: The type of the PancakeSwap chain.
-- `PANCAKESWAP_CHAIN_REFERENCE_ID`: The reference ID of the PancakeSwap chain.
-- `LOB_CW_CODE_ID`: The code ID of the Limit Order Bot contract.
+You need Python 3.8 or above installed on your machine.
 
 ## Dependencies
 
