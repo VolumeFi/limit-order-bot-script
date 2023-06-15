@@ -16,7 +16,7 @@ const PALOMA_LCD = process.env.PALOMA_LCD;
 const PALOMA_CHAIN_ID = process.env.PALOMA_CHAIN_ID;
 const PALOMA_PRIVATE_KEY = process.env.PALOMA_KEY;
 
-const VETH=0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
+const VETH="0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE";
 const SLIPPAGE = process.env.SLIPPAGE;
 const DENOMINATOR = 1000;
 const MAX_SIZE = 8;
