@@ -33,7 +33,8 @@ async function convert(deposit) {
 app.get('/robots', async (req, res) => {
     try {
         let depositor = req.query.depositor || null;
-        let deposits = await getPendingDeposits(depositor);
+        let chain_id = req.query.chain || null;
+        let deposits = await getPendingDeposits(chain_id, depositor);
         let result = [];
 
         for (const deposit of deposits) {

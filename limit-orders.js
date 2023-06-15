@@ -457,21 +457,34 @@ async function getChatIdByAddress(address) {
     });
 }
 
-async function getPendingDeposits(depositor = null) {
+async function getPendingDeposits(chain_id = null, depositor = null) {
     let dbAll = promisify(db.all).bind(db);
 
     try {
         let rows;
-        if (depositor) {
-            rows = await dbAll(`SELECT * FROM deposits WHERE depositor = ? AND withdraw_block IS NULL;`, depositor);
-        } else {
-            rows = await dbAll(`SELECT * FROM deposits WHERE withdraw_block IS NULL;`);
+        let query = `SELECT * FROM deposits WHERE withdraw_block IS NULL`;
+
+        if (chain_id !== null) {
+            if (chain_id === 56) {
+                query += ` AND network_name = 'BSC'`;
+            } else if (chain_id === 1) {
+                query += ` AND network_name = 'ETH'`;
+            }
         }
+
+        if (depositor) {
+            query += ` AND depositor = ?`;
+            rows = await dbAll(query, depositor);
+        } else {
+            rows = await dbAll(query);
+        }
+
         return rows;
     } catch (err) {
         console.error(err.message);
     }
 }
+
 
 async function updatePrice(depositId, price) {
     await db.runAsync(
