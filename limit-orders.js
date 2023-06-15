@@ -490,31 +490,33 @@ if (process.env.TELEGRAM_ID) {
     const token = process.env.TELEGRAM_ID;
     bot = new TelegramBot(token, { polling: true });
 
-    bot.on('message', (msg) => {
-        const chatId = msg.chat.id;
-        db.get(`SELECT address FROM users WHERE chat_id = ?;`, [chatId], (err, row) => {
-            if (err) {
-                console.error(err.message);
-                return;
-            }
-            if (row) {
-                bot.sendMessage(chatId, 'We already have your address. We will notify you when any of your swaps are complete.');
-            } else {
-                bot.sendMessage(chatId, 'Please provide your address');
-            }
-        });
-    });
+    bot.onText(/(.*)/, (msg, match) => {
+        const regex = /^(0x[a-fA-F0-9]{40})$/;
+        if (!regex.test(match[0])) {
+            const chatId = msg.chat.id;
+            db.get(`SELECT address FROM users WHERE chat_id = ?;`, [chatId], (err, row) => {
+                if (err) {
+                    console.error(err.message);
+                    return;
+                }
+                if (row) {
+                    bot.sendMessage(chatId, 'We already have your address. We will notify you when any of your swaps are complete.');
+                } else {
+                    bot.sendMessage(chatId, 'Please provide your address');
+                }
+            });
+        } else {
+            const chatId = msg.chat.id;
+            const address = match[1];
+            db.run(`INSERT OR REPLACE INTO users(chat_id, address) VALUES(?, ?);`, [chatId, address], function (err) {
+                if (err) {
+                    console.error(err.message);
+                    return;
+                }
+                bot.sendMessage(chatId, 'Address received! We will notify you when the swap is complete.');
+            });
+        }
 
-    bot.onText(/^(0x[a-fA-F0-9]{40})$/, (msg, match) => {
-        const chatId = msg.chat.id;
-        const address = match[1];
-        db.run(`INSERT OR REPLACE INTO users(chat_id, address) VALUES(?, ?);`, [chatId, address], function (err) {
-            if (err) {
-                console.error(err.message);
-                return;
-            }
-            bot.sendMessage(chatId, 'Address received! We will notify you when the swap is complete.');
-        });
     });
 } else {
     console.log("TELEGRAM_ID not set.. bot not going to connect.")
