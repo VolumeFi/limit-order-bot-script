@@ -25,7 +25,7 @@ async function convert(deposit) {
     }
 
     let coin_info = await getCoinInfo(deposit.token1);
-    result[coin_info] = coin_info;
+    result['coin_info'] = coin_info;
 
     return result;
 }
