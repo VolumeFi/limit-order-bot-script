@@ -33,8 +33,9 @@ async function convert(deposit) {
 app.get('/robots', async (req, res) => {
     try {
         let depositor = req.query.depositor || null;
-        let chain_id = req.query.chain || null;
-        let deposits = await getPendingDeposits(chain_id, depositor);
+        let chain_id = req.query.chain_id || null;
+        let dex = req.query.dex || null;
+        let deposits = await getPendingDeposits(chain_id, depositor, dex);
         let result = [];
 
         for (const deposit of deposits) {
@@ -46,6 +47,7 @@ app.get('/robots', async (req, res) => {
         res.status(500).send(err.message);
     }
 });
+
 
 const port = process.env.PORT || 3000;
 

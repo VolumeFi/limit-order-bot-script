@@ -10,7 +10,8 @@
     "NETWORK_NAME": "BSC",
     "WETH": "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c",
     "FROM_BLOCK": 28843198,
-    "CW": "paloma1qmk0v725sdg5ecu6xfh5pt0fv0nfzrstarue2maum3snzk2zrt5qxjxv2y"
+    "CW": "paloma1qmk0v725sdg5ecu6xfh5pt0fv0nfzrstarue2maum3snzk2zrt5qxjxv2y",
+    "DEX": "pancakeswap"
   },
   {
     "NODE": "https://crimson-silent-sunset.quiknode.pro/",
@@ -23,6 +24,7 @@
     "NETWORK_NAME": "ETH",
     "WETH": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
     "FROM_BLOCK": 17416203,
-    "CW": "paloma1335rlmhujm0gj5e9gh7at9jpqvqckz0mpe4v284ar4lw5mlkryzsdsctt7"
+    "CW": "paloma1335rlmhujm0gj5e9gh7at9jpqvqckz0mpe4v284ar4lw5mlkryzsdsctt7",
+    "DEX": "uniswapv2"
   }
 ]
