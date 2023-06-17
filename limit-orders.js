@@ -31,6 +31,7 @@ let networkName = null;
 let connections = null;
 let FROM_BLOCK = null;
 let LOB_CW = null;
+let DEX = null;
 
 async function setupConnections() {
     const data = await fs.readFile('./networks.json', 'utf8');
@@ -43,6 +44,7 @@ async function setupConnections() {
             contractInstance: new web3.eth.Contract(JSON.parse(config.ABI), config.VYPER),
             coingeckoChainId: config.COINGECKO_CHAIN_ID,
             networkName: config.NETWORK_NAME,
+            dex: config.DEX,
             weth: config.WETH,
             fromBlock: config.FROM_BLOCK,
             cw: config.CW
@@ -77,7 +79,8 @@ db.serialize(() => {
             withdraw_block INTEGER,
             withdraw_amount TEXT,
             withdrawer TEXT,
-            network_name TEXT
+            network_name TEXT,
+            dex_name TEXT
         );`);
     db.run(`CREATE INDEX IF NOT EXISTS deposit_idx ON deposits (deposit_id);`);
 
@@ -174,6 +177,7 @@ async function getLastBlock() {
         WETH = connection.weth;
         FROM_BLOCK = connection.fromBlock;
         LOB_CW = connection.cw;
+        DEX = connection.dex;
         prices[networkName] = [];
 
         try {
@@ -280,8 +284,8 @@ async function getNewBlocks(fromBlock) {
         deposited_events[key].returnValues["price"] = prices[networkName][token1.toLowerCase()];
     }
     if (deposited_events.length !== 0) {
-        let placeholders = deposited_events.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").join(", ");
-        let sql = `INSERT INTO deposits (deposit_id, token0, token1, amount0, amount1, depositor, deposit_price, tracking_price, profit_taking, stop_loss, network_name) VALUES ` + placeholders + ";";
+        let placeholders = deposited_events.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").join(", ");
+        let sql = `INSERT INTO deposits (deposit_id, token0, token1, amount0, amount1, depositor, deposit_price, tracking_price, profit_taking, stop_loss, network_name, dex_name) VALUES ` + placeholders + ";";
 
         let flat_array = [];
         for (const deposited_event of deposited_events) {
@@ -300,6 +304,7 @@ async function getNewBlocks(fromBlock) {
             flat_array.push(insert_profit_taking);
             flat_array.push(insert_stop_loss);
             flat_array.push(networkName);
+            flat_array.push(DEX);
         }
         await db.runAsync(sql, flat_array);
     }
@@ -457,7 +462,7 @@ async function getChatIdByAddress(address) {
     });
 }
 
-async function getPendingDeposits(chain_id = null, depositor = null) {
+async function getPendingDeposits(chain_id = null, depositor = null, dex = null) {
     let dbAll = promisify(db.all).bind(db);
 
     try {
@@ -474,7 +479,18 @@ async function getPendingDeposits(chain_id = null, depositor = null) {
 
         if (depositor) {
             query += ` AND depositor = ?`;
+        }
+
+        if (dex) {
+            query += ` AND LOWER(dex_name) = LOWER(?)`;
+        }
+
+        if (depositor && dex) {
+            rows = await dbAll(query, depositor, dex);
+        } else if (depositor) {
             rows = await dbAll(query, depositor);
+        } else if (dex) {
+            rows = await dbAll(query, dex);
         } else {
             rows = await dbAll(query);
         }
@@ -484,6 +500,7 @@ async function getPendingDeposits(chain_id = null, depositor = null) {
         console.error(err.message);
     }
 }
+
 
 
 async function updatePrice(depositId, price) {
