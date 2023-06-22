@@ -29,7 +29,7 @@ let connections = null;
 let FROM_BLOCK = null;
 let LOB_CW = null;
 let DEX = null;
-let BOT = "";
+let BOT = "limit-order";
 
 async function setupConnections() {
     const data = await fs.readFile('./networks.json', 'utf8');
