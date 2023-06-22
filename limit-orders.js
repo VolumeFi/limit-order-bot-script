@@ -52,7 +52,8 @@ async function setupConnections() {
 
 setupConnections().then(r => { });
 
-let db = new sqlite3.Database("./events.db");
+let db = new sqlite3.Database(process.env.DB_LOCATION);
+
 db.serialize(() => {
     db.run(
         `CREATE TABLE IF NOT EXISTS fetched_blocks (
@@ -398,6 +399,45 @@ async function updatePrice(depositId, price) {
 
 function processDeposits() {
     setInterval(getLastBlock, 1000 * 1);
+}
+
+async function getPendingDeposits(chain_id = null, depositor = null, dex = null) {
+    let dbAll = promisify(db.all).bind(db);
+
+    try {
+        let rows;
+        let query = `SELECT * FROM deposits WHERE withdraw_block IS NULL`;
+
+        if (chain_id !== null) {
+            if (chain_id === 56) {
+                query += ` AND network_name = 'BSC'`;
+            } else if (chain_id === 1) {
+                query += ` AND network_name = 'ETH'`;
+            }
+        }
+
+        if (depositor) {
+            query += ` AND depositor = ?`;
+        }
+
+        if (dex) {
+            query += ` AND LOWER(dex_name) = LOWER(?)`;
+        }
+
+        if (depositor && dex) {
+            rows = await dbAll(query, depositor, dex);
+        } else if (depositor) {
+            rows = await dbAll(query, depositor);
+        } else if (dex) {
+            rows = await dbAll(query, dex);
+        } else {
+            rows = await dbAll(query);
+        }
+
+        return rows;
+    } catch (err) {
+        console.error(err.message);
+    }
 }
 
 
