@@ -5,10 +5,7 @@ const sqlite3 = require("sqlite3").verbose();
 const LCDClient = require('@palomachain/paloma.js').LCDClient;
 const MsgExecuteContract = require('@palomachain/paloma.js').MsgExecuteContract;
 const MnemonicKey = require('@palomachain/paloma.js').MnemonicKey;
-const TelegramBot = require('node-telegram-bot-api');
 const fs = require('fs').promises;
-const { Pool } = require('pg');
-const geckoTokens = require("./gecko.json");
 
 require("dotenv").config();
 
@@ -32,6 +29,7 @@ let connections = null;
 let FROM_BLOCK = null;
 let LOB_CW = null;
 let DEX = null;
+let BOT = "";
 
 async function setupConnections() {
     const data = await fs.readFile('./networks.json', 'utf8');
@@ -65,23 +63,24 @@ db.serialize(() => {
     );
     db.run(
         `CREATE TABLE IF NOT EXISTS deposits (
-            deposit_id INTEGER NOT NULL,
-            token0 TEXT NOT NULL,
-            token1 TEXT NOT NULL,
-            amount0 TEXT NOT NULL,
-            amount1 TEXT NOT NULL,
-            depositor TEXT NOT NULL,
-            deposit_price REAL,
-            tracking_price REAL,
-            profit_taking INTEGER,
-            stop_loss INTEGER,
-            withdraw_type INTEGER,
-            withdraw_block INTEGER,
-            withdraw_amount TEXT,
-            withdrawer TEXT,
-            network_name TEXT,
-            dex_name TEXT
-        );`);
+        deposit_id INTEGER NOT NULL,
+        token0 TEXT NOT NULL,
+        token1 TEXT NOT NULL,
+        amount0 TEXT NOT NULL,
+        amount1 TEXT NOT NULL,
+        depositor TEXT NOT NULL,
+        deposit_price REAL,
+        tracking_price REAL,
+        profit_taking INTEGER,
+        stop_loss INTEGER,
+        withdraw_type INTEGER,
+        withdraw_block INTEGER,
+        withdraw_amount TEXT,
+        withdrawer TEXT,
+        network_name TEXT,
+        dex_name TEXT,
+        bot TEXT
+    );`);
     db.run(`CREATE INDEX IF NOT EXISTS deposit_idx ON deposits (deposit_id);`);
 
     db.run(`CREATE TABLE IF NOT EXISTS users(
@@ -93,65 +92,6 @@ db.serialize(() => {
 
 db.getAsync = promisify(db.get).bind(db);
 db.runAsync = promisify(db.run).bind(db);
-
-const pool = new Pool({
-    user: process.env.PG_USER,
-    host: process.env.PG_HOST,
-    database: process.env.PG_DATABASE,
-    password: process.env.PG_PASSWORD,
-    port: process.env.PG_PORT,
-});
-
-async function fetchCoinData(coinID) {
-    const queryText = 'SELECT data FROM coinData WHERE coin_id = $1';
-    const res = await pool.query(queryText, [coinID]);
-
-    if (res.rows.length > 0) {
-        return res.rows[0].data;
-    } else {
-        const response = await axios({
-            url: `https://pro-api.coingecko.com/api/v3/coins/${coinID}?x_cg_pro_api_key=${process.env.COINGECKO_API_KEY}`,
-            method: 'get',
-            timeout: 8000,
-            headers: {
-                'Content-Type': 'application/json',
-            }
-        });
-
-        if (response.data) {
-            const insertText = 'INSERT INTO coinData(coin_id, data) VALUES($1, $2)';
-            await pool.query(insertText, [coinID, response.data]);
-
-            return response.data;
-        }
-    }
-}
-
-async function getCoinInfo(id) {
-    let coinInfo = null;
-
-    for (const geckoToken of geckoTokens) {
-        Object.keys(geckoToken.platforms).forEach(prop => {
-            try {
-                if (geckoToken.platforms[prop].toLowerCase() == id.toLowerCase()) {
-                    coinInfo = geckoToken;
-                    //break;
-                }
-            } catch (e) {
-
-            }
-        });
-        if(coinInfo) { break; }
-    }
-
-
-    if (coinInfo) {
-        let coinData = await fetchCoinData(coinInfo.id);
-        coinInfo['image'] = coinData.image;
-    }
-
-    return coinInfo;
-}
 
 // Fetch all deposited order.
 // Fetch all withdrawn/canceled order.
@@ -284,8 +224,8 @@ async function getNewBlocks(fromBlock) {
         deposited_events[key].returnValues["price"] = prices[networkName][token1.toLowerCase()];
     }
     if (deposited_events.length !== 0) {
-        let placeholders = deposited_events.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").join(", ");
-        let sql = `INSERT INTO deposits (deposit_id, token0, token1, amount0, amount1, depositor, deposit_price, tracking_price, profit_taking, stop_loss, network_name, dex_name) VALUES ` + placeholders + ";";
+        let placeholders = deposited_events.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").join(", ");
+        let sql = `INSERT INTO deposits (deposit_id, token0, token1, amount0, amount1, depositor, deposit_price, tracking_price, profit_taking, stop_loss, network_name, dex_name, bot) VALUES ` + placeholders + ";";
 
         let flat_array = [];
         for (const deposited_event of deposited_events) {
@@ -305,6 +245,7 @@ async function getNewBlocks(fromBlock) {
             flat_array.push(insert_stop_loss);
             flat_array.push(networkName);
             flat_array.push(DEX);
+            flat_array.push(BOT);
         }
         await db.runAsync(sql, flat_array);
     }
@@ -448,61 +389,6 @@ async function executeWithdraw(deposits) {
     return result;
 }
 
-async function getChatIdByAddress(address) {
-    await db.get(`SELECT chat_id FROM users WHERE address = ?;`, [address], (err, row) => {
-        if (err) {
-            console.error(err.message);
-            return null;
-        }
-        if (row) {
-            return row.chat_id;
-        } else {
-            return null;
-        }
-    });
-}
-
-async function getPendingDeposits(chain_id = null, depositor = null, dex = null) {
-    let dbAll = promisify(db.all).bind(db);
-
-    try {
-        let rows;
-        let query = `SELECT * FROM deposits WHERE withdraw_block IS NULL`;
-
-        if (chain_id !== null) {
-            if (chain_id === 56) {
-                query += ` AND network_name = 'BSC'`;
-            } else if (chain_id === 1) {
-                query += ` AND network_name = 'ETH'`;
-            }
-        }
-
-        if (depositor) {
-            query += ` AND depositor = ?`;
-        }
-
-        if (dex) {
-            query += ` AND LOWER(dex_name) = LOWER(?)`;
-        }
-
-        if (depositor && dex) {
-            rows = await dbAll(query, depositor, dex);
-        } else if (depositor) {
-            rows = await dbAll(query, depositor);
-        } else if (dex) {
-            rows = await dbAll(query, dex);
-        } else {
-            rows = await dbAll(query);
-        }
-
-        return rows;
-    } catch (err) {
-        console.error(err.message);
-    }
-}
-
-
-
 async function updatePrice(depositId, price) {
     await db.runAsync(
         `UPDATE deposits SET tracking_price = ? WHERE deposit_id = ? AND network_name = ?;`,
@@ -514,54 +400,7 @@ function processDeposits() {
     setInterval(getLastBlock, 1000 * 1);
 }
 
-let bot = null;
-
-if (process.env.TELEGRAM_ID) {
-    const token = process.env.TELEGRAM_ID;
-    bot = new TelegramBot(token, { polling: true });
-
-    bot.onText(/(.*)/, (msg, match) => {
-        const regex = /^(0x[a-fA-F0-9]{40})$/;
-        if (!regex.test(match[0])) {
-            const chatId = msg.chat.id;
-            db.get(`SELECT address FROM users WHERE chat_id = ?;`, [chatId], (err, row) => {
-                if (err) {
-                    console.error(err.message);
-                    return;
-                }
-                if (row) {
-                    bot.sendMessage(chatId, 'We already have your address. We will notify you when any of your swaps are complete.');
-                } else {
-                    bot.sendMessage(chatId, 'Please provide your address');
-                }
-            });
-        } else {
-            const chatId = msg.chat.id;
-            const address = match[1];
-            db.run(`INSERT OR REPLACE INTO users(chat_id, address) VALUES(?, ?);`, [chatId, address], function (err) {
-                if (err) {
-                    console.error(err.message);
-                    return;
-                }
-                bot.sendMessage(chatId, 'Address received! We will notify you when the swap is complete.');
-            });
-        }
-
-    });
-} else {
-    console.log("TELEGRAM_ID not set.. bot not going to connect.")
-}
-
-function swapComplete(chatId) {
-    if (chatId !== undefined) {
-        if (bot !== null) {
-            bot.sendMessage(chatId, 'Your swap is complete!');
-        }
-    }
-}
 
 module.exports = {
     processDeposits,
-    getPendingDeposits,
-    getCoinInfo
 };
