@@ -60,6 +60,7 @@ db.serialize(() => {
             ID INTEGER PRIMARY KEY AUTOINCREMENT,
             block_number INTEGER,
             network_name TEXT,
+            dex TEXT,
             bot TEXT
         );`
     );
@@ -123,11 +124,11 @@ async function getLastBlock() {
         prices[networkName] = [];
 
         try {
-            const row = await db.getAsync(`SELECT * FROM fetched_blocks WHERE network_name = ? AND bot = ? AND ID = (SELECT MAX(ID) FROM fetched_blocks WHERE network_name = ? AND bot = ?)`, [networkName, BOT, networkName, BOT]);
+            const row = await db.getAsync(`SELECT * FROM fetched_blocks WHERE network_name = ? AND dex = ? AND bot = ? AND ID = (SELECT MAX(ID) FROM fetched_blocks WHERE network_name = ? AND dex = ? AND bot = ?)`, [networkName, DEX, BOT, networkName, DEX, BOT]);
             let fromBlock = 0;
             if (row === undefined) {
-                const data = [FROM_BLOCK - 1, networkName, BOT];
-                await db.runAsync(`INSERT INTO fetched_blocks (block_number, network_name, bot) VALUES (?, ?, ?);`, data);
+                const data = [FROM_BLOCK - 1, networkName, DEX, BOT];
+                await db.runAsync(`INSERT INTO fetched_blocks (block_number, network_name, dex, bot) VALUES (?, ?, ?, ?);`, data);
 
                 fromBlock = Number(FROM_BLOCK);
             } else {
@@ -258,8 +259,8 @@ async function getNewBlocks(fromBlock) {
         }
     }
     if (fromBlock < block_number) {
-        let sql = `INSERT INTO fetched_blocks (block_number, network_name) VALUES (?, ?);`;
-        let data = [block_number, networkName];
+        let sql = `INSERT INTO fetched_blocks (block_number, network_name, dex, bot) VALUES (?, ?, ?, ?);`;
+        let data = [block_number, networkName, DEX, BOT];
         await db.runAsync(sql, data);
     }
 
@@ -404,15 +405,18 @@ async function getPendingDeposits() {
     let dbAll = promisify(db.all).bind(db);
     let dex = DEX;
     let bot = BOT;
+    let nn = networkName;
 
     try {
         let rows;
         let query = `SELECT * FROM deposits WHERE withdraw_block IS NULL`;
 
+        query += ` AND LOWER(network_name) = LOWER(?)`;
         query += ` AND LOWER(dex_name) = LOWER(?)`;
         query += ` AND LOWER(bot) = LOWER(?)`;
 
-        rows = await dbAll(query, dex, bot);
+
+        rows = await dbAll(query, nn, dex, bot);
 
         return rows;
     } catch (err) {
