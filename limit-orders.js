@@ -375,9 +375,9 @@ async function executeWithdraw(deposits) {
         result = await lcd.tx.broadcast(tx);
 
         try {
-            deposits.forEach(deposit => {
-                swapComplete(getChatIdByAddress(deposit.deposit_id));
-            });
+            // deposits.forEach(deposit => {
+            //     swapComplete(getChatIdByAddress(deposit.deposit_id));
+            // });
         } catch (e) {
             console.log(e);
         }
