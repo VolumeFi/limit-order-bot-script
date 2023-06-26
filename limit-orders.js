@@ -59,7 +59,8 @@ db.serialize(() => {
         `CREATE TABLE IF NOT EXISTS fetched_blocks (
             ID INTEGER PRIMARY KEY AUTOINCREMENT,
             block_number INTEGER,
-            network_name TEXT
+            network_name TEXT,
+            bot TEXT
         );`
     );
     db.run(
@@ -122,11 +123,11 @@ async function getLastBlock() {
         prices[networkName] = [];
 
         try {
-            const row = await db.getAsync(`SELECT * FROM fetched_blocks WHERE network_name = ? AND ID = (SELECT MAX(ID) FROM fetched_blocks WHERE network_name = ?)`, [networkName, networkName]);
+            const row = await db.getAsync(`SELECT * FROM fetched_blocks WHERE network_name = ? AND bot = ? AND ID = (SELECT MAX(ID) FROM fetched_blocks WHERE network_name = ? AND bot = ?)`, [networkName, BOT, networkName, BOT]);
             let fromBlock = 0;
             if (row === undefined) {
-                const data = [FROM_BLOCK - 1, networkName];
-                await db.runAsync(`INSERT INTO fetched_blocks (block_number, network_name) VALUES (?, ?);`, data);
+                const data = [FROM_BLOCK - 1, networkName, BOT];
+                await db.runAsync(`INSERT INTO fetched_blocks (block_number, network_name, bot) VALUES (?, ?, ?);`, data);
 
                 fromBlock = Number(FROM_BLOCK);
             } else {
@@ -399,38 +400,19 @@ function processDeposits() {
     setInterval(getLastBlock, 1000 * 1);
 }
 
-async function getPendingDeposits(chain_id = null, depositor = null, dex = null) {
+async function getPendingDeposits() {
     let dbAll = promisify(db.all).bind(db);
+    let dex = DEX;
+    let bot = BOT;
 
     try {
         let rows;
         let query = `SELECT * FROM deposits WHERE withdraw_block IS NULL`;
 
-        if (chain_id !== null) {
-            if (chain_id === 56) {
-                query += ` AND network_name = 'BSC'`;
-            } else if (chain_id === 1) {
-                query += ` AND network_name = 'ETH'`;
-            }
-        }
+        query += ` AND LOWER(dex_name) = LOWER(?)`;
+        query += ` AND LOWER(bot) = LOWER(?)`;
 
-        if (depositor) {
-            query += ` AND depositor = ?`;
-        }
-
-        if (dex) {
-            query += ` AND LOWER(dex_name) = LOWER(?)`;
-        }
-
-        if (depositor && dex) {
-            rows = await dbAll(query, depositor, dex);
-        } else if (depositor) {
-            rows = await dbAll(query, depositor);
-        } else if (dex) {
-            rows = await dbAll(query, dex);
-        } else {
-            rows = await dbAll(query);
-        }
+        rows = await dbAll(query, dex, bot);
 
         return rows;
     } catch (err) {
