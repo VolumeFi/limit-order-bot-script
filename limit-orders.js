@@ -66,24 +66,25 @@ db.serialize(() => {
     );
     db.run(
         `CREATE TABLE IF NOT EXISTS deposits (
-        deposit_id INTEGER NOT NULL,
-        token0 TEXT NOT NULL,
-        token1 TEXT NOT NULL,
-        amount0 TEXT NOT NULL,
-        amount1 TEXT NOT NULL,
-        depositor TEXT NOT NULL,
-        deposit_price REAL,
-        tracking_price REAL,
-        profit_taking INTEGER,
-        stop_loss INTEGER,
-        withdraw_type INTEGER,
-        withdraw_block INTEGER,
-        withdraw_amount TEXT,
-        withdrawer TEXT,
-        network_name TEXT,
-        dex_name TEXT,
-        bot TEXT
-    );`);
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    deposit_id INTEGER NOT NULL,
+    token0 TEXT NOT NULL,
+    token1 TEXT NOT NULL,
+    amount0 TEXT NOT NULL,
+    amount1 TEXT NOT NULL,
+    depositor TEXT NOT NULL,
+    deposit_price REAL,
+    tracking_price REAL,
+    profit_taking INTEGER,
+    stop_loss INTEGER,
+    withdraw_type INTEGER,
+    withdraw_block INTEGER,
+    withdraw_amount TEXT,
+    withdrawer TEXT,
+    network_name TEXT,
+    dex_name TEXT,
+    bot TEXT
+);`);
     db.run(`CREATE INDEX IF NOT EXISTS deposit_idx ON deposits (deposit_id);`);
 
     db.run(`CREATE TABLE IF NOT EXISTS users(
@@ -345,7 +346,7 @@ async function processDeposit(deposit) {
 
     let price = prices[networkName][token1.toLowerCase()];
 
-    await updatePrice(deposit.deposit_id, price);
+    await updatePrice(deposit.id, price);
 
     if (Number(price) > Number(deposit.profit_taking)) {
         return { "deposit_id": Number(deposit.deposit_id), "withdraw_type": PROFIT_TAKING };
@@ -390,10 +391,10 @@ async function executeWithdraw(deposits) {
     return result;
 }
 
-async function updatePrice(depositId, price) {
+async function updatePrice(id, price) {
     await db.runAsync(
-        `UPDATE deposits SET tracking_price = ? WHERE deposit_id = ? AND network_name = ?;`,
-        [price, depositId, networkName], null
+        `UPDATE deposits SET tracking_price = ? WHERE id = ? ;`,
+        [price, id], null
     );
 }
 
