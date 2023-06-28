@@ -236,7 +236,7 @@ async function getNewBlocks(fromBlock) {
             const profit_taking = deposited_event.returnValues["profit_taking"];
             const stop_loss = deposited_event.returnValues["stop_loss"];
             const insert_profit_taking = Number(profit_taking) + Number(SLIPPAGE);
-            const insert_stop_loss = Number(stop_loss) - Number(SLIPPAGE);
+            const insert_stop_loss = Number(stop_loss) > Number(SLIPPAGE) ? Number(stop_loss) - Number(SLIPPAGE) : 0;
             flat_array.push(deposited_event.returnValues["deposit_id"]);
             flat_array.push(deposited_event.returnValues["token0"]);
             flat_array.push(deposited_event.returnValues["token1"]);
