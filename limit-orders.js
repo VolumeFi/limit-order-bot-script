@@ -17,8 +17,8 @@ const VETH="0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE";
 const SLIPPAGE = process.env.SLIPPAGE;
 const DENOMINATOR = 1000;
 const MAX_SIZE = 8;
-const PROFIT_TAKING = 1;
-const STOP_LOSS = 2;
+const PROFIT_TAKING = 2;
+const STOP_LOSS = 4;
 
 let WETH = null;
 let web3 = null;
