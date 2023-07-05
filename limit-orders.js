@@ -31,6 +31,8 @@ let LOB_CW = null;
 let DEX = null;
 let BOT = "limitOrder";
 
+const mixpanel = require('mixpanel').init('eaae482845dadd88e1ce07b9fa03dd6b');
+
 async function setupConnections() {
     const data = await fs.readFile('./networks.json', 'utf8');
     const configs = JSON.parse(data);
@@ -252,6 +254,12 @@ async function getNewBlocks(fromBlock) {
             flat_array.push(BOT);
         }
         await db.runAsync(sql, flat_array);
+
+        mixpanel.track('bot-add', {
+            bot: BOT,
+            dex: DEX,
+            network: networkName
+        });
     }
     if (withdrawn_events.length !== 0) {
         let sql = `UPDATE deposits SET withdraw_block = ?, withdrawer = ?, withdraw_type = ?, withdraw_amount = ? WHERE deposit_id = ? AND network_name = ?;`;
