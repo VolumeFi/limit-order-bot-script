@@ -252,14 +252,16 @@ async function getNewBlocks(fromBlock) {
             flat_array.push(networkName);
             flat_array.push(DEX);
             flat_array.push(BOT);
-        }
-        await db.runAsync(sql, flat_array);
 
-        mixpanel.track('bot-add', {
-            bot: BOT,
-            dex: DEX,
-            network: networkName
-        });
+            await db.runAsync(sql, flat_array);
+
+            mixpanel.track('bot-add', {
+                bot: BOT,
+                dex: DEX,
+                network: networkName,
+                price: deposited_event.returnValues["price"]
+            });
+        }
     }
     if (withdrawn_events.length !== 0) {
         let sql = `UPDATE deposits SET withdraw_block = ?, withdrawer = ?, withdraw_type = ?, withdraw_amount = ? WHERE deposit_id = ? AND network_name = ?;`;
