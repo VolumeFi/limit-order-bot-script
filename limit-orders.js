@@ -167,6 +167,12 @@ async function retryAxiosRequest(url, method, timeout, headers, maxRetries) {
     throw new Error(`Maximum retries exceeded ${error}`);
 }
 
+async function canAddDeposit(swap_id) {
+    const row = await db.getAsync(`SELECT COUNT(*) as count FROM deposits WHERE deposit_id = ? AND network_name = ? AND dex_name = ? AND bot = ?`, [swap_id, networkName, DEX, BOT]);
+
+    return row.count === 0;
+}
+
 async function getNewBlocks(fromBlock) {
     const block_number = Number(await web3.eth.getBlockNumber());
     let deposited_events = [];
@@ -229,38 +235,42 @@ async function getNewBlocks(fromBlock) {
         }
         deposited_events[key].returnValues["price"] = prices[networkName][token1.toLowerCase()];
     }
+
+
     if (deposited_events.length !== 0) {
         let placeholders = deposited_events.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").join(", ");
         let sql = `INSERT INTO deposits (deposit_id, token0, token1, amount0, amount1, depositor, deposit_price, tracking_price, profit_taking, stop_loss, network_name, dex_name, bot) VALUES ` + placeholders + ";";
 
         let flat_array = [];
         for (const deposited_event of deposited_events) {
-            const profit_taking = deposited_event.returnValues["profit_taking"];
-            const stop_loss = deposited_event.returnValues["stop_loss"];
-            const insert_profit_taking = Number(profit_taking) + Number(SLIPPAGE);
-            const insert_stop_loss = Number(stop_loss) > Number(SLIPPAGE) ? Number(stop_loss) - Number(SLIPPAGE) : 0;
-            flat_array.push(deposited_event.returnValues["deposit_id"]);
-            flat_array.push(deposited_event.returnValues["token0"]);
-            flat_array.push(deposited_event.returnValues["token1"]);
-            flat_array.push(deposited_event.returnValues["amount0"]);
-            flat_array.push(deposited_event.returnValues["amount1"]);
-            flat_array.push(deposited_event.returnValues["depositor"]);
-            flat_array.push(deposited_event.returnValues["price"]);
-            flat_array.push(deposited_event.returnValues["price"]);
-            flat_array.push(insert_profit_taking);
-            flat_array.push(insert_stop_loss);
-            flat_array.push(networkName);
-            flat_array.push(DEX);
-            flat_array.push(BOT);
+            if(await canAddDeposit(deposited_event.returnValues["deposit_id"])) {
+                const profit_taking = deposited_event.returnValues["profit_taking"];
+                const stop_loss = deposited_event.returnValues["stop_loss"];
+                const insert_profit_taking = Number(profit_taking) + Number(SLIPPAGE);
+                const insert_stop_loss = Number(stop_loss) > Number(SLIPPAGE) ? Number(stop_loss) - Number(SLIPPAGE) : 0;
+                flat_array.push(deposited_event.returnValues["deposit_id"]);
+                flat_array.push(deposited_event.returnValues["token0"]);
+                flat_array.push(deposited_event.returnValues["token1"]);
+                flat_array.push(deposited_event.returnValues["amount0"]);
+                flat_array.push(deposited_event.returnValues["amount1"]);
+                flat_array.push(deposited_event.returnValues["depositor"]);
+                flat_array.push(deposited_event.returnValues["price"]);
+                flat_array.push(deposited_event.returnValues["price"]);
+                flat_array.push(insert_profit_taking);
+                flat_array.push(insert_stop_loss);
+                flat_array.push(networkName);
+                flat_array.push(DEX);
+                flat_array.push(BOT);
 
-            await db.runAsync(sql, flat_array);
+                await db.runAsync(sql, flat_array);
 
-            mixpanel.track('bot-add', {
-                bot: BOT,
-                dex: DEX,
-                network: networkName,
-                price: deposited_event.returnValues["price"]
-            });
+                mixpanel.track('bot-add', {
+                    bot: BOT,
+                    dex: DEX,
+                    network: networkName,
+                    price: deposited_event.returnValues["price"]
+                });
+            }
         }
     }
     if (withdrawn_events.length !== 0) {
