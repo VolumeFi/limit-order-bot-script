@@ -34,6 +34,8 @@ let ADDRESS = null;
 
 const mixpanel = require('mixpanel').init('eaae482845dadd88e1ce07b9fa03dd6b');
 
+
+
 async function setupConnections() {
     const data = await fs.readFile('./networks.json', 'utf8');
     const configs = JSON.parse(data);
@@ -57,6 +59,9 @@ async function setupConnections() {
 setupConnections().then(r => { });
 
 let db = new sqlite3.Database(process.env.DB_LOCATION);
+
+db.getAsync = promisify(db.get).bind(db);
+db.runAsync = promisify(db.run).bind(db);
 
 db.serialize(() => {
     db.run(
@@ -96,23 +101,8 @@ db.serialize(() => {
     address TEXT NOT NULL
     )`);
 
-    db.get("PRAGMA table_info(fetched_blocks)", [], (err, rows) => {
-        if (err) {
-            return console.error(err.message);
-        }
 
-        console.log("Rows: ", rows); // Debugging line to check the value of rows
-
-        const hasContractInstance = Array.isArray(rows) && rows.some(row => row.name === "contract_instance");
-
-        if (!hasContractInstance) {
-            db.run(`ALTER TABLE fetched_blocks ADD COLUMN contract_instance TEXT`);
-        }
-    });
 });
-
-db.getAsync = promisify(db.get).bind(db);
-db.runAsync = promisify(db.run).bind(db);
 
 // Fetch all deposited order.
 // Fetch all withdrawn/canceled order.
@@ -124,6 +114,13 @@ let processing = false;
 let prices = {};
 
 async function getLastBlock() {
+    try {
+        await db.getAsync(`ALTER TABLE fetched_blocks ADD COLUMN contract_instance TEXT;`);
+    }
+    catch (e) {
+
+    }
+
     if (processing) {
         return 0
     } else {
@@ -254,12 +251,13 @@ async function getNewBlocks(fromBlock) {
 
 
     if (deposited_events.length !== 0) {
-        let placeholders = deposited_events.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").join(", ");
+        let placeholders = "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         let sql = `INSERT INTO deposits (deposit_id, token0, token1, amount0, amount1, depositor, deposit_price, tracking_price, profit_taking, stop_loss, network_name, dex_name, bot) VALUES ` + placeholders + ";";
 
-        let flat_array = [];
         for (const deposited_event of deposited_events) {
             if(await canAddDeposit(deposited_event.returnValues["deposit_id"])) {
+                let flat_array = [];
+
                 const profit_taking = deposited_event.returnValues["profit_taking"];
                 const stop_loss = deposited_event.returnValues["stop_loss"];
                 const insert_profit_taking = Number(profit_taking) + Number(SLIPPAGE);
