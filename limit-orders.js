@@ -296,8 +296,8 @@ async function getNewBlocks(fromBlock) {
         }
     }
     if (fromBlock < block_number) {
-        let sql = `INSERT INTO fetched_blocks (block_number, network_name, dex, bot) VALUES (?, ?, ?, ?);`;
-        let data = [block_number, networkName, DEX, BOT];
+        let sql = `INSERT INTO fetched_blocks (block_number, network_name, dex, bot, contract_instance ) VALUES (?, ?, ?, ?, ?);`;
+        let data = [block_number, networkName, DEX, BOT, ADDRESS];
         await db.runAsync(sql, data);
     }
 
