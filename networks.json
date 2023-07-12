@@ -53,6 +53,7 @@
     "WETH": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
     "FROM_BLOCK": 17400000,
     "CW": "paloma1cyq9g0g6xgumdj0uhsy8kyrg2w3dhr2c9dkydxxfetj0t8l4tpfspdkmrz",
-    "DEX": "uniswapv2"
+    "DEX": "uniswapv2",
+    "OLD": true
   }
 ]
