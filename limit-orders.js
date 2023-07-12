@@ -30,6 +30,7 @@ let FROM_BLOCK = null;
 let LOB_CW = null;
 let DEX = null;
 let BOT = "limitOrder";
+let ADDRESS = null;
 
 const mixpanel = require('mixpanel').init('eaae482845dadd88e1ce07b9fa03dd6b');
 
@@ -47,7 +48,8 @@ async function setupConnections() {
             dex: config.DEX,
             weth: config.WETH,
             fromBlock: config.FROM_BLOCK,
-            cw: config.CW
+            cw: config.CW,
+            address: config.VYPER
         };
     });
 }
@@ -94,6 +96,19 @@ db.serialize(() => {
     address TEXT NOT NULL
     )`);
 
+    db.get("PRAGMA table_info(fetched_blocks)", [], (err, rows) => {
+        if (err) {
+            return console.error(err.message);
+        }
+
+        console.log("Rows: ", rows); // Debugging line to check the value of rows
+
+        const hasContractInstance = Array.isArray(rows) && rows.some(row => row.name === "contract_instance");
+
+        if (!hasContractInstance) {
+            db.run(`ALTER TABLE fetched_blocks ADD COLUMN contract_instance TEXT`);
+        }
+    });
 });
 
 db.getAsync = promisify(db.get).bind(db);
@@ -118,6 +133,7 @@ async function getLastBlock() {
     for (const connection of connections) {
         web3 = connection.web3;
         contractInstance = connection.contractInstance;
+        ADDRESS = connection.address;
         COINGECKO_CHAIN_ID = connection.coingeckoChainId;
         networkName = connection.networkName;
         WETH = connection.weth;
@@ -127,11 +143,11 @@ async function getLastBlock() {
         prices[networkName] = [];
 
         try {
-            const row = await db.getAsync(`SELECT * FROM fetched_blocks WHERE network_name = ? AND dex = ? AND bot = ? AND ID = (SELECT MAX(ID) FROM fetched_blocks WHERE network_name = ? AND dex = ? AND bot = ?)`, [networkName, DEX, BOT, networkName, DEX, BOT]);
+            const row = await db.getAsync(`SELECT * FROM fetched_blocks WHERE network_name = ? AND dex = ? AND bot = ? AND contract_instance = ? AND ID = (SELECT MAX(ID) FROM fetched_blocks WHERE network_name = ? AND dex = ? AND bot = ? AND contract_instance = ?)`, [networkName, DEX, BOT, ADDRESS, networkName, DEX, BOT, ADDRESS]);
             let fromBlock = 0;
             if (row === undefined) {
-                const data = [FROM_BLOCK - 1, networkName, DEX, BOT];
-                await db.runAsync(`INSERT INTO fetched_blocks (block_number, network_name, dex, bot) VALUES (?, ?, ?, ?);`, data);
+                const data = [FROM_BLOCK - 1, networkName, DEX, BOT, ADDRESS];
+                await db.runAsync(`INSERT INTO fetched_blocks (block_number, network_name, dex, bot, contract_instance) VALUES (?, ?, ?, ?, ?);`, data);
 
                 fromBlock = Number(FROM_BLOCK);
             } else {
@@ -280,8 +296,8 @@ async function getNewBlocks(fromBlock) {
         }
     }
     if (fromBlock < block_number) {
-        let sql = `INSERT INTO fetched_blocks (block_number, network_name, dex, bot) VALUES (?, ?, ?, ?);`;
-        let data = [block_number, networkName, DEX, BOT];
+        let sql = `INSERT INTO fetched_blocks (block_number, network_name, dex, bot, contract_instance ) VALUES (?, ?, ?, ?, ?);`;
+        let data = [block_number, networkName, DEX, BOT, ADDRESS];
         await db.runAsync(sql, data);
     }
 
