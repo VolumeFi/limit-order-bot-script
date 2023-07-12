@@ -31,6 +31,7 @@ let LOB_CW = null;
 let DEX = null;
 let BOT = "limitOrder";
 let ADDRESS = null;
+let OLD = false;
 
 const mixpanel = require('mixpanel').init('eaae482845dadd88e1ce07b9fa03dd6b');
 
@@ -51,7 +52,8 @@ async function setupConnections() {
             weth: config.WETH,
             fromBlock: config.FROM_BLOCK,
             cw: config.CW,
-            address: config.VYPER
+            address: config.VYPER,
+            old: config.OLD
         };
     });
 }
@@ -113,7 +115,7 @@ db.serialize(() => {
 let processing = false;
 let prices = {};
 
-async function getLastBlock() {
+async function updateTables() {
     try {
         await db.getAsync(`ALTER TABLE fetched_blocks ADD COLUMN contract_instance TEXT;`);
     }
@@ -121,11 +123,29 @@ async function getLastBlock() {
 
     }
 
+    try {
+        await db.getAsync(`ALTER TABLE deposits ADD COLUMN contract TEXT;`);
+    }
+    catch (e) {
+
+    }
+
+    try {
+        await db.getAsync(`ALTER TABLE deposits ADD COLUMN old TEXT;`);
+    }
+    catch (e) {
+
+    }
+}
+
+async function getLastBlock() {
     if (processing) {
         return 0
     } else {
         processing = true;
     }
+
+    await updateTables();
 
     for (const connection of connections) {
         web3 = connection.web3;
@@ -137,6 +157,7 @@ async function getLastBlock() {
         FROM_BLOCK = connection.fromBlock;
         LOB_CW = connection.cw;
         DEX = connection.dex;
+        OLD = connection.old || false;
         prices[networkName] = [];
 
         try {
@@ -251,8 +272,8 @@ async function getNewBlocks(fromBlock) {
 
 
     if (deposited_events.length !== 0) {
-        let placeholders = "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-        let sql = `INSERT INTO deposits (deposit_id, token0, token1, amount0, amount1, depositor, deposit_price, tracking_price, profit_taking, stop_loss, network_name, dex_name, bot) VALUES ` + placeholders + ";";
+        let placeholders = "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        let sql = `INSERT INTO deposits (deposit_id, token0, token1, amount0, amount1, depositor, deposit_price, tracking_price, profit_taking, stop_loss, network_name, dex_name, bot, contract, old) VALUES ` + placeholders + ";";
 
         for (const deposited_event of deposited_events) {
             if(await canAddDeposit(deposited_event.returnValues["deposit_id"])) {
@@ -275,6 +296,8 @@ async function getNewBlocks(fromBlock) {
                 flat_array.push(networkName);
                 flat_array.push(DEX);
                 flat_array.push(BOT);
+                flat_array.push(ADDRESS);
+                flat_array.push(OLD);
 
                 await db.runAsync(sql, flat_array);
 
