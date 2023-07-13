@@ -160,6 +160,8 @@ async function getLastBlock() {
         OLD = connection.old || false;
         prices[networkName] = [];
 
+
+
         try {
             const row = await db.getAsync(`SELECT * FROM fetched_blocks WHERE network_name = ? AND dex = ? AND bot = ? AND contract_instance = ? AND ID = (SELECT MAX(ID) FROM fetched_blocks WHERE network_name = ? AND dex = ? AND bot = ? AND contract_instance = ?)`, [networkName, DEX, BOT, ADDRESS, networkName, DEX, BOT, ADDRESS]);
             let fromBlock = 0;
@@ -171,6 +173,8 @@ async function getLastBlock() {
             } else {
                 fromBlock = row["block_number"] + 1;
             }
+
+            console.log(connection, fromBlock);
 
             await getNewBlocks(fromBlock);
         } catch (err) {
