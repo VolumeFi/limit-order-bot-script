@@ -47,7 +47,7 @@ async function setupConnections() {
 setupConnections().then(r => { });
 
 let db = new sqlite3.Database(process.env.DB_LOCATION);
-
+//SELECT * FROM deposits WHERE contract COLLATE NOCASE = '0x4495467f9cD04faF5fa65ed34AF335d4e2e7e129';
 db.getAsync = promisify(db.get).bind(db);
 db.runAsync = promisify(db.run).bind(db);
 
@@ -300,12 +300,24 @@ async function getNewBlocks(fromBlock) {
 
         }
     }
+
     if (withdrawn_events.length !== 0) {
-        let sql = `UPDATE deposits SET withdraw_block = ?, withdrawer = ?, withdraw_type = ?, withdraw_amount = ? WHERE deposit_id = ? AND network_name = ?;`;
+        let sql = `UPDATE deposits SET withdraw_block = ?, withdrawer = ?, withdraw_type = ?, withdraw_amount = ? WHERE deposit_id = ? AND network_name = ? AND bot = ? AND contract = ?;`;
         for (const withdrawn_event of withdrawn_events) {
-            await db.runAsync(sql, [withdrawn_event.blockNumber, withdrawn_event.returnValues["withdrawer"], withdrawn_event.returnValues["withdraw_type"], withdrawn_event.returnValues["withdraw_amount"], withdrawn_event.returnValues["deposit_id"], networkName]);
+            let data = [
+                withdrawn_event.blockNumber,
+                withdrawn_event.returnValues["withdrawer"],
+                withdrawn_event.returnValues["withdraw_type"],
+                withdrawn_event.returnValues["withdraw_amount"],
+                withdrawn_event.returnValues["deposit_id"],
+                networkName,
+                BOT,
+                ADDRESS
+            ];
+            await db.runAsync(sql, data);
         }
     }
+
     if (fromBlock < block_number) {
         let sql = `UPDATE fetched_blocks SET block_number = ? WHERE network_name = ? AND dex = ? AND bot = ? AND contract_instance = ?;`;
         let data = [block_number, networkName, DEX, BOT, ADDRESS];
