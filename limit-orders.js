@@ -36,26 +36,12 @@ let OLD = false;
 const mixpanel = require('mixpanel').init('eaae482845dadd88e1ce07b9fa03dd6b');
 
 
+let configs = null;
 
 async function setupConnections() {
     const data = await fs.readFile('./networks.json', 'utf8');
-    const configs = JSON.parse(data);
 
-    connections = configs.map(config => {
-        const web3 = new Web3(config.NODE);
-        return {
-            web3: web3,
-            contractInstance: new web3.eth.Contract(JSON.parse(config.ABI), config.VYPER),
-            coingeckoChainId: config.COINGECKO_CHAIN_ID,
-            networkName: config.NETWORK_NAME,
-            dex: config.DEX,
-            weth: config.WETH,
-            fromBlock: config.FROM_BLOCK,
-            cw: config.CW,
-            address: config.VYPER,
-            old: config.OLD
-        };
-    });
+    configs = JSON.parse(data);
 }
 
 setupConnections().then(r => { });
@@ -147,20 +133,18 @@ async function getLastBlock() {
 
     await updateTables();
 
-    for (const connection of connections) {
-        web3 = connection.web3;
-        contractInstance = connection.contractInstance;
-        ADDRESS = connection.address;
-        COINGECKO_CHAIN_ID = connection.coingeckoChainId;
-        networkName = connection.networkName;
-        WETH = connection.weth;
-        FROM_BLOCK = connection.fromBlock;
-        LOB_CW = connection.cw;
-        DEX = connection.dex;
-        OLD = connection.old || false;
+    for (const config of configs) {
+        web3 = new Web3(config.NODE);
+        contractInstance = new web3.eth.Contract(JSON.parse(config.ABI), config.VYPER);
+        ADDRESS = config.VYPER;
+        COINGECKO_CHAIN_ID = config.COINGECKO_CHAIN_ID;
+        networkName = config.NETWORK_NAME;
+        WETH = config.WETH;
+        FROM_BLOCK = config.FROM_BLOCK;
+        LOB_CW = config.CW;
+        DEX = config.DEX;
+        OLD = config.OLD || false;
         prices[networkName] = [];
-
-
 
         try {
             const row = await db.getAsync(`SELECT * FROM fetched_blocks WHERE network_name = ? AND dex = ? AND bot = ? AND contract_instance = ? AND ID = (SELECT MAX(ID) FROM fetched_blocks WHERE network_name = ? AND dex = ? AND bot = ? AND contract_instance = ?)`, [networkName, DEX, BOT, ADDRESS, networkName, DEX, BOT, ADDRESS]);
@@ -254,7 +238,6 @@ async function getNewBlocks(fromBlock) {
         ));
     }
 
-
     for (const response of responses) {
         Object.keys(response.data).forEach(value => {
             let price_index = value;
@@ -266,12 +249,15 @@ async function getNewBlocks(fromBlock) {
         });
     }
 
-    for (let key in deposited_events) {
-        let token1 = deposited_events[key].returnValues["token1"];
+
+    for (const deposited_event of deposited_events) {
+        let token1 = deposited_event.returnValues["token1"];
+
         if (token1 === VETH) {
             token1 = WETH;
         }
-        deposited_events[key].returnValues["price"] = prices[networkName][token1.toLowerCase()];
+
+        deposited_event.returnValues["price"] = prices[networkName][token1.toLowerCase()];
     }
 
 
@@ -280,38 +266,38 @@ async function getNewBlocks(fromBlock) {
         let sql = `INSERT INTO deposits (deposit_id, token0, token1, amount0, amount1, depositor, deposit_price, tracking_price, profit_taking, stop_loss, network_name, dex_name, bot, contract, old) VALUES ` + placeholders + ";";
 
         for (const deposited_event of deposited_events) {
-            if(await canAddDeposit(deposited_event.returnValues["deposit_id"])) {
-                let flat_array = [];
 
-                const profit_taking = deposited_event.returnValues["profit_taking"];
-                const stop_loss = deposited_event.returnValues["stop_loss"];
-                const insert_profit_taking = Number(profit_taking) + Number(SLIPPAGE);
-                const insert_stop_loss = Number(stop_loss) > Number(SLIPPAGE) ? Number(stop_loss) - Number(SLIPPAGE) : 0;
-                flat_array.push(deposited_event.returnValues["deposit_id"]);
-                flat_array.push(deposited_event.returnValues["token0"]);
-                flat_array.push(deposited_event.returnValues["token1"]);
-                flat_array.push(deposited_event.returnValues["amount0"]);
-                flat_array.push(deposited_event.returnValues["amount1"]);
-                flat_array.push(deposited_event.returnValues["depositor"]);
-                flat_array.push(deposited_event.returnValues["price"]);
-                flat_array.push(deposited_event.returnValues["price"]);
-                flat_array.push(insert_profit_taking);
-                flat_array.push(insert_stop_loss);
-                flat_array.push(networkName);
-                flat_array.push(DEX);
-                flat_array.push(BOT);
-                flat_array.push(ADDRESS);
-                flat_array.push(OLD);
+            let flat_array = [];
 
-                await db.runAsync(sql, flat_array);
+            const profit_taking = deposited_event.returnValues["profit_taking"];
+            const stop_loss = deposited_event.returnValues["stop_loss"];
+            const insert_profit_taking = Number(profit_taking) + Number(SLIPPAGE);
+            const insert_stop_loss = Number(stop_loss) > Number(SLIPPAGE) ? Number(stop_loss) - Number(SLIPPAGE) : 0;
+            flat_array.push(deposited_event.returnValues["deposit_id"]);
+            flat_array.push(deposited_event.returnValues["token0"]);
+            flat_array.push(deposited_event.returnValues["token1"]);
+            flat_array.push(deposited_event.returnValues["amount0"]);
+            flat_array.push(deposited_event.returnValues["amount1"]);
+            flat_array.push(deposited_event.returnValues["depositor"]);
+            flat_array.push(deposited_event.returnValues["price"]);
+            flat_array.push(deposited_event.returnValues["price"]);
+            flat_array.push(insert_profit_taking);
+            flat_array.push(insert_stop_loss);
+            flat_array.push(networkName);
+            flat_array.push(DEX);
+            flat_array.push(BOT);
+            flat_array.push(ADDRESS);
+            flat_array.push(OLD);
 
-                mixpanel.track('bot-add', {
-                    bot: BOT,
-                    dex: DEX,
-                    network: networkName,
-                    price: deposited_event.returnValues["price"]
-                });
-            }
+            await db.runAsync(sql, flat_array);
+
+            mixpanel.track('bot-add', {
+                bot: BOT,
+                dex: DEX,
+                network: networkName,
+                price: deposited_event.returnValues["price"]
+            });
+
         }
     }
     if (withdrawn_events.length !== 0) {
@@ -321,7 +307,7 @@ async function getNewBlocks(fromBlock) {
         }
     }
     if (fromBlock < block_number) {
-        let sql = `INSERT INTO fetched_blocks (block_number, network_name, dex, bot, contract_instance ) VALUES (?, ?, ?, ?, ?);`;
+        let sql = `UPDATE fetched_blocks SET block_number = ? WHERE network_name = ? AND dex = ? AND bot = ? AND contract_instance = ?;`;
         let data = [block_number, networkName, DEX, BOT, ADDRESS];
         await db.runAsync(sql, data);
     }
