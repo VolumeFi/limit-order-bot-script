@@ -158,7 +158,7 @@ async function getLastBlock() {
                 fromBlock = row["block_number"] + 1;
             }
 
-            console.log(connection, fromBlock);
+
 
             await getNewBlocks(fromBlock);
         } catch (err) {
