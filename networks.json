@@ -51,7 +51,7 @@
     "COINGECKO_CHAIN_ID": "binance-smart-chain",
     "NETWORK_NAME": "BSC",
     "WETH": "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c",
-    "FROM_BLOCK": 29400000,
+    "FROM_BLOCK": 28800000,
     "CW": "paloma1r350z0yr94quj9g7tz8c9lyyfs8533huam6cm37fl62ss763qurssragtn",
     "DEX": "apeswap",
     "OLD": true
