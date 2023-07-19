@@ -289,14 +289,18 @@ async function getNewBlocks(fromBlock) {
             flat_array.push(ADDRESS);
             flat_array.push(OLD);
 
-            await db.runAsync(sql, flat_array);
+            try {
+                await db.runAsync(sql, flat_array);
 
-            mixpanel.track('bot-add', {
-                bot: BOT,
-                dex: DEX,
-                network: networkName,
-                price: deposited_event.returnValues["price"]
-            });
+                mixpanel.track('bot-add', {
+                    bot: BOT,
+                    dex: DEX,
+                    network: networkName,
+                    price: deposited_event.returnValues["price"]
+                });
+            } catch (e) {
+                console.log(e);
+            }
 
         }
     }
