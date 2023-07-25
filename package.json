@@ -2,6 +2,7 @@
   "dependencies": {
     "@palomachain/paloma.js": "3.0.25",
     "@sentry/node": "^7.52.1",
+    "axios": "^1.4.0",
     "dotenv": "^16.0.3",
     "express": "^4.18.2",
     "mixpanel": "^0.17.0",
