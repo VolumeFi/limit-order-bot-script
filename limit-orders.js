@@ -321,11 +321,15 @@ async function getNewBlocks(fromBlock) {
             ];
             await db.runAsync(sql, data);
 
-            const depositor = await getDepositor(withdrawn_event.returnValues["deposit_id"]);
-            if (depositor && withdrawn_event.returnValues["withdrawer"] !== depositor) {
-                axios.get(TELEGRAM_ALERT_API, {
-                    params: { depositor: depositor }
-                });
+            try {
+                const depositor = await getDepositor(withdrawn_event.returnValues["deposit_id"]);
+                if (depositor && withdrawn_event.returnValues["withdrawer"] !== depositor) {
+                    axios.get(TELEGRAM_ALERT_API, {
+                        params: { depositor: depositor }
+                    });
+                }
+            } catch (error) {
+                console.log('Telegram alert error', error);
             }
         }
     }
