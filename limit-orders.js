@@ -485,6 +485,7 @@ async function getPendingDeposits() {
     let dex = DEX;
     let bot = BOT;
     let nn = networkName;
+    let contract = ADDRESS;
 
     try {
         let rows;
@@ -493,9 +494,10 @@ async function getPendingDeposits() {
         query += ` AND LOWER(network_name) = LOWER(?)`;
         query += ` AND LOWER(dex_name) = LOWER(?)`;
         query += ` AND LOWER(bot) = LOWER(?)`;
+        query += ` AND LOWER(contract) = LOWER(?);`
 
 
-        rows = await dbAll(query, nn, dex, bot);
+        rows = await dbAll(query, nn, dex, bot, contract);
 
         return rows;
     } catch (err) {
