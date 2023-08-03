@@ -5,6 +5,7 @@ const sqlite3 = require("sqlite3").verbose();
 const LCDClient = require('@palomachain/paloma.js').LCDClient;
 const MsgExecuteContract = require('@palomachain/paloma.js').MsgExecuteContract;
 const MnemonicKey = require('@palomachain/paloma.js').MnemonicKey;
+const geckoTokens = require("./gecko.json");
 const fs = require('fs').promises;
 
 require("dotenv").config();
@@ -20,6 +21,12 @@ const DENOMINATOR = 1000;
 const MAX_SIZE = 8;
 const PROFIT_TAKING = 2;
 const STOP_LOSS = 4;
+const BOT_NAME = 'Limit Order';
+const WithdrawType = {
+    SUCCESS: 1, // All success withdrawn type.
+    EXPIRED: 2, // For Limit order, Stop loss bot type.
+    REMAINING: 3 // For DCA bot type.
+};
 
 let WETH = null;
 let web3 = null;
@@ -322,10 +329,17 @@ async function getNewBlocks(fromBlock) {
             await db.runAsync(sql, data);
 
             try {
-                const depositor = await getDepositor(withdrawn_event.returnValues["deposit_id"]);
-                if (depositor && withdrawn_event.returnValues["withdrawer"] !== depositor) {
+                const botInfo = await getBot(withdrawn_event.returnValues["deposit_id"]);
+                const tokenName = await getBotName(botInfo['token1']);
+                const withdrawType = withdrawn_event.returnValues["withdraw_type"];
+                if (botInfo && withdrawType !== 'CANCEL') {
                     axios.get(TELEGRAM_ALERT_API, {
-                        params: { depositor: depositor }
+                        params: {
+                            depositor: botInfo["depositor"],
+                            kind: withdrawType === 'EXPIRE' ? WithdrawType.EXPIRED : WithdrawType.SUCCESS,
+                            tokenName: tokenName,
+                            botType: BOT_NAME,
+                        },
                     });
                 }
             } catch (error) {
@@ -458,15 +472,42 @@ async function executeWithdraw(deposits) {
     return result;
 }
 
-async function getDepositor(deposit_id) {
+async function getBot(deposit_id) {
     const sql = `
-        SELECT depositor FROM deposits
+        SELECT depositor, token1 FROM deposits
         WHERE deposit_id = ? AND contract = ?;
       `;
 
     const row = await db.getAsync(sql, [deposit_id, ADDRESS]);
 
-    return row["depositor"];
+    return row;
+}
+
+async function getBotName(tokenAddress) {
+    let coinInfo = null;
+
+    for (const geckoToken of geckoTokens) {
+        if (tokenAddress.toLowerCase() !== VETH.toLowerCase()) {
+            Object.values(geckoToken.platforms).forEach(prop => {
+                try {
+                    if (prop.toLowerCase() == tokenAddress.toLowerCase()) {
+                        coinInfo = geckoToken;
+                        //break;
+                    }
+                } catch (e) {
+
+                }
+            });
+        } else {
+            if (geckoToken.id == "ethereum") {
+                coinInfo = geckoToken;
+            }
+        }
+
+        if (coinInfo) { break; }
+    }
+
+    return coinInfo ? coinInfo['name'] : null;
 }
 
 async function updatePrice(id, price) {
