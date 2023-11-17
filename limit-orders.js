@@ -523,7 +523,7 @@ async function processDeposit(deposit) {
     await updatePrice(deposit.id, price, price1);
 
     let deposit_price_ratio = deposit.deposit_price1 / deposit.deposit_price;
-    let current_price_ratio = deposit.tracking_price1 / deposit.tracking_price;
+    let current_price_ratio = price1 / price;
 
     if (Number(current_price_ratio) > Number(deposit_price_ratio) * (Number(deposit.profit_taking) + Number(DENOMINATOR)) / Number(DENOMINATOR)) {
         return { "deposit_id": Number(deposit.deposit_id), "withdraw_type": PROFIT_TAKING };
