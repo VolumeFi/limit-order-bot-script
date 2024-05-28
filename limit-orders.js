@@ -317,19 +317,11 @@ async function getNewBlocks(fromBlock) {
     for (const deposited_event of deposited_events) {
         let token0 = deposited_event.returnValues["token0"];
 
-        if (token0 === VETH) {
-            token0 = WETH;
-        }
-
         deposited_event.returnValues["price"] = prices[networkName][token0.toLowerCase()];
     }
 
     for (const deposited_event of deposited_events) {
         let token1 = deposited_event.returnValues["token1"];
-
-        if (token1 === VETH) {
-            token1 = WETH;
-        }
 
         deposited_event.returnValues["price1"] = prices[networkName][token1.toLowerCase()];
     }
@@ -508,14 +500,8 @@ async function getMinAmount(deposit_id, withdraw_type) {
 
 async function processDeposit(deposit) {
     let token0 = deposit.token0;
-    if (token0 === VETH) {
-        token0 = WETH;
-    }
 
     let token1 = deposit.token1;
-    if (token1 === VETH) {
-        token1 = WETH;
-    }
 
     let price = prices[networkName][token0.toLowerCase()];
     let price1 = prices[networkName][token1.toLowerCase()];
