@@ -14,13 +14,9 @@ from paloma_sdk.client.lcd.api.tx import CreateTxOptions
 
 
 async def limit_order_bot_init(config: dict):
-    node: str = config['NODE']
-    w3: Web3 = Web3(Web3.HTTPProvider(node))
     pancakeswap_lob_vyper = config['VYPER']
     pancakeswap_lob_abi = json.loads(config['ABI'])
-    lob_sc: Contract = w3.eth.contract(
-        address=pancakeswap_lob_vyper, abi=pancakeswap_lob_abi)
-    payload = lob_sc.encodeABI("multiple_withdraw", [[], [], []])[2:]
+    payload = ""
 
     paloma_lcd = os.environ['PALOMA_LCD']
     paloma_chain_id = os.environ['PALOMA_CHAIN_ID']
@@ -35,16 +31,20 @@ async def limit_order_bot_init(config: dict):
     job_id = config['JOB_ID']
     chain_type = config['CHAIN_TYPE']
     chain_reference_id = config['CHAIN_REFERENCE_ID']
+    creator = wallet.key.acc_address
+    signers = [wallet.key.acc_address]
     result = await paloma.job_scheduler.create_job(
         wallet, job_id, pancakeswap_lob_vyper, pancakeswap_lob_abi, payload,
-        chain_type, chain_reference_id)
+        chain_type, chain_reference_id, creator, signers)
     print(result)
     time.sleep(6)
 
     # Instantiate
     initialize_msg = {
         "retry_delay": 30,
-        "job_id": job_id
+        "job_id": job_id,
+        "creator": creator,
+        "signers": signers,
     }
     code_id = os.environ['LOB_CW_CODE_ID']
     funds = Coins()
